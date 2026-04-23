@@ -2,6 +2,7 @@ import React from 'react';
 import type { ReactNode } from 'react';
 import Header from './Header';
 import NavBar from './NavBar';
+import { CartProvider } from '../context/CartContext';
 
 export interface LayoutProps {
   /** Page title shown in header */
@@ -11,11 +12,13 @@ export interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ title, children }) => (
-  <div className="app-container">
-    <Header brand={title} />
-    <NavBar />
-    <main className="main-content">{children}</main>
-  </div>
+  <CartProvider>
+    <div className="app-container">
+      <Header brand={title} />
+      <NavBar />
+      <main className="main-content">{children}</main>
+    </div>
+  </CartProvider>
 );
 
 export default Layout;
