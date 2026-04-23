@@ -145,6 +145,25 @@ code {
 
 
 /* Forms */
+
+/* Product Controls */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.search-input,
+.sort-select {
+  padding: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font: inherit;
+}
+.sort-select {
+  min-width: 140px;
+}
+
 .newsletter,
 .contact-form {
   margin-top: 2rem;
