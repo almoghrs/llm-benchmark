@@ -3,6 +3,7 @@ import heroImg from './assets/hero.png';
 import './index.css';
 import NewsletterForm from './components/NewsletterForm';
 import ContactForm from './components/ContactForm';
+import ProductGrid from './components/ProductGrid';
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
       </section>
       <NewsletterForm />
       <ContactForm />
+      <ProductGrid />
     </Layout>
   );
 }
