@@ -6,16 +6,15 @@
 ## Prompt
 
 ```text
-We want to add "record-level audit logs": every time a Survey or
-Organization is created / updated / deleted, record who did it, when,
-and what changed.
+We want to add "A/B Testing" for survey links: allowing users to create
+two variations of a survey and split traffic 50/50 between them.
 
 DO NOT WRITE CODE YET. Produce a plan:
 - Where in the existing architecture should this hook in? (be specific —
-  name the lib/service layer or the Prisma middleware)
-- DB schema proposal (table, columns, indexes)
-- API surface for reading audit logs
-- Open questions / trade-offs (perf, storage, PII, retention)
+  name the lib/service layer, the response collection, and the frontend router)
+- DB schema proposal (new tables, modifications to Survey or Environment, indexes)
+- API surface for tracking which variant was shown and collecting responses
+- Open questions / trade-offs (cookie vs. IP tracking, analytics, DB load)
 - Break into 3–5 concrete engineering tasks with rough effort
 
 Wait for my feedback before any implementation.
@@ -24,7 +23,7 @@ Wait for my feedback before any implementation.
 ## Expected
 
 - Respects "no code yet" and "wait for feedback".
-- Grounds the plan in the actual repo — names real service layers or Prisma middleware patterns seen in the codebase.
-- Schema proposal is sensible (actor_id, entity_type, entity_id, diff JSON, timestamp, environment_id, indexes).
-- Raises real trade-offs (write amplification, PII in diffs, retention).
+- Grounds the plan in the actual repo — names real service layers and the Next.js App router patterns seen in the codebase.
+- Schema proposal is sensible (e.g., variant_id, split_percentage, mapping to responses).
+- Raises real trade-offs (e.g., how to deterministically assign variants to anonymous respondents without breaking cache).
 - Tasks are small enough to estimate.

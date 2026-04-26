@@ -16,6 +16,7 @@ You have access to this repository. Produce an architecture document
 4. The data model at a high level (name the 6–8 most important
    Prisma models and how they relate).
 5. External dependencies (DB, cache, queue) and what each is used for.
+6. How enterprise or paid features are separated from the open-source core.
 
 Base everything on files you actually read. Cite file paths. Do not invent.
 ```
