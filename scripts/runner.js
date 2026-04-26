@@ -2,32 +2,9 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-const REMIXED_PATH = path.join(__dirname, '../Remixed.md');
+const TASKS_DIR = path.join(__dirname, '../tasks');
 const FORMBRICKS_DIR = path.join(__dirname, '../formbricks');
 const CSV_LOG_PATH = path.join(__dirname, '../benchmark_results.csv');
-
-// Regex to extract tasks from the Remixed.md markdown
-// It looks for ### T-XX, then grabs everything until the next ### or end of file
-const TASK_REGEX = /###\s+(T-\d{2})\s+·.*?(?=\n###\s+T-|\n##\s+§|$)/gs;
-const PROMPT_REGEX = /\*\*Prompt:\*\*\s*```(?:\w+)?\n([\s\S]*?)\n```/s;
-
-function parseTasks() {
-  const content = fs.readFileSync(REMIXED_PATH, 'utf-8');
-  const tasks = {};
-  
-  let match;
-  while ((match = TASK_REGEX.exec(content)) !== null) {
-    const taskId = match[1];
-    const taskBlock = match[0];
-    
-    const promptMatch = PROMPT_REGEX.exec(taskBlock);
-    if (promptMatch) {
-      tasks[taskId] = promptMatch[1].trim();
-    }
-  }
-  
-  return tasks;
-}
 
 function resetRepo() {
   console.log(`\n🔄 Resetting ${FORMBRICKS_DIR} to a clean state...`);
@@ -36,8 +13,6 @@ function resetRepo() {
 }
 
 function appendToCsv(runId, taskId, category, prompts, timeMin, quality, hallucinations, compiles, verdict, notes) {
-  const date = new Date().toISOString().split('T')[0];
-  
   if (!fs.existsSync(CSV_LOG_PATH)) {
     fs.writeFileSync(CSV_LOG_PATH, 'run_id,date,model,model_version,infra,evaluator\n', 'utf-8');
     fs.appendFileSync(CSV_LOG_PATH, `run_id,task_id,category,prompts,time_min,quality_5,hallucinations,compiles,verdict,notes\n`);
@@ -48,12 +23,36 @@ function appendToCsv(runId, taskId, category, prompts, timeMin, quality, halluci
   console.log(`📝 Logged result for ${taskId} to ${CSV_LOG_PATH}`);
 }
 
-async function runTask(taskId, modelCmd) {
-  const tasks = parseTasks();
-  const prompt = tasks[taskId];
+function extractPromptAndExpected(taskId) {
+  const taskMdPath = path.join(TASKS_DIR, taskId, 'task.md');
+  if (!fs.existsSync(taskMdPath)) {
+    throw new Error(`Task ${taskId} not found at ${taskMdPath}`);
+  }
   
-  if (!prompt) {
-    console.error(`❌ Task ${taskId} not found in Remixed.md`);
+  const content = fs.readFileSync(taskMdPath, 'utf-8');
+  
+  // Extract prompt
+  const promptMatch = content.match(/## Prompt\n\n```text\n([\s\S]*?)\n```/);
+  const expectedMatch = content.match(/## Expected\n\n([\s\S]*?)$/);
+  
+  if (!promptMatch || !expectedMatch) {
+    throw new Error(`Could not parse prompt or expected rubric from ${taskMdPath}`);
+  }
+  
+  return {
+    prompt: promptMatch[1].trim(),
+    expected: expectedMatch[1].trim()
+  };
+}
+
+async function runTask(taskId, modelCmd) {
+  let prompt, expected;
+  try {
+    const extracted = extractPromptAndExpected(taskId);
+    prompt = extracted.prompt;
+    expected = extracted.expected;
+  } catch (err) {
+    console.error(`❌ ${err.message}`);
     process.exit(1);
   }
 
@@ -71,23 +70,75 @@ async function runTask(taskId, modelCmd) {
 
   console.log(`🤖 Invoking agent: ${modelCmd}`);
   const startTime = Date.now();
+  let agentOutput = '';
 
   try {
-    // We execute the target model via shell. For example: opencode -c "prompt"
-    // To handle quotes in the prompt properly, we pass it via environment variable
-    execSync(`${modelCmd} run "$BENCHMARK_PROMPT"`, { 
+    const result = execSync(`${modelCmd} run "$BENCHMARK_PROMPT"`, { 
       cwd: FORMBRICKS_DIR, 
-      stdio: 'inherit',
-      env: { ...process.env, BENCHMARK_PROMPT: prompt }
+      env: { ...process.env, BENCHMARK_PROMPT: prompt },
+      stdio: ['pipe', 'pipe', 'pipe']
     });
+    agentOutput = result.toString();
+    console.log(agentOutput);
   } catch (error) {
+    agentOutput = error.stdout ? error.stdout.toString() : '';
+    agentOutput += '\n' + (error.stderr ? error.stderr.toString() : '');
+    console.log(agentOutput);
     console.error(`\n⚠️ Agent execution exited with error.`);
   }
 
   const timeMin = Math.round((Date.now() - startTime) / 60000);
   console.log(`\n⏱️  Task execution took ~${timeMin} minutes.`);
+
+  console.log(`\n⚖️ Generating Assessment...`);
+  
+  const assessmentPrompt = `
+You are an expert evaluator. Compare the following agent output against the expected rubric.
+
+Expected Rubric:
+${expected}
+
+Agent Output:
+${agentOutput}
+
+Please provide a detailed assessment of whether the agent output meets the expected rubric, and assign a final quality score (0-5).
+`;
+
+  let assessmentOutput = '';
+  try {
+    const result = execSync(`${modelCmd} run "$ASSESSMENT_PROMPT"`, { 
+      cwd: FORMBRICKS_DIR, 
+      env: { ...process.env, ASSESSMENT_PROMPT: assessmentPrompt },
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    assessmentOutput = result.toString();
+    console.log(assessmentOutput);
+  } catch (error) {
+    assessmentOutput = error.stdout ? error.stdout.toString() : '';
+    assessmentOutput += '\n' + (error.stderr ? error.stderr.toString() : '');
+    console.log(assessmentOutput);
+    console.error(`\n⚠️ Assessment execution failed.`);
+  }
+
+  const assessmentMdPath = path.join(TASKS_DIR, taskId, 'assessment.md');
+  const assessmentContent = `# Assessment for ${taskId}
+
+## Agent Output
+
+\`\`\`text
+${agentOutput}
+\`\`\`
+
+## Evaluation
+
+${assessmentOutput}
+`;
+
+  fs.writeFileSync(assessmentMdPath, assessmentContent, 'utf-8');
+  console.log(`\n✅ Saved output and assessment to ${assessmentMdPath}`);
+  
   console.log(`\nNext steps:`);
-  console.log(`1. Evaluate the agent's output.`);
+  console.log(`1. Review the assessment in ${assessmentMdPath}.`);
   console.log(`2. Log the results manually or automate using appendToCsv().`);
 }
 
