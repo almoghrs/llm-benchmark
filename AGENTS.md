@@ -9,6 +9,12 @@ Welcome! If you are an autonomous agent (like Gemini CLI or OpenCode) working in
 3. **Target Repository:** The tasks are designed to be executed against the `formbricks` subdirectory. Do not attempt to execute tasks against the root benchmarking repository itself.
 4. **Headless Execution:** When running the runner script, ensure your agent commands are formatted to run non-interactively since the I/O is piped.
 
-## Context
+## Testing and Benchmarking
 
-This repository is a benchmark suite for evaluating LLMs on a real, complex monorepo. Your role here is typically to maintain the benchmarking infrastructure (the runner scripts, the task definitions) or to act as the subject being benchmarked by executing the `runner.js` script.
+When asked to run tests or benchmarks, you **must** use `opencode` as the agent. Always execute tasks using the `scripts/runner.js` script with the following command format:
+
+```bash
+node scripts/runner.js <TASK_ID> --cmd "opencode -m openrouter/openai/gpt-oss-120b:free"
+```
+
+Replace `<TASK_ID>` with the specific task ID (e.g., `T-01`, `T-02`, etc.). Run tasks one by one and assess the results after each run.
