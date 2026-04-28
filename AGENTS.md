@@ -14,7 +14,9 @@ Welcome! If you are an autonomous agent (like Gemini CLI or OpenCode) working in
 When asked to run tests or benchmarks, you **must** use `opencode` as the agent. Always execute tasks using the `scripts/runner.js` script with the following command format:
 
 ```bash
-node scripts/runner.js <TASK_ID> --cmd "opencode -m openrouter/openai/gpt-oss-120b:free"
+node scripts/runner.js <TASK_ID> --cmd "opencode run {{PROMPT}} -m openrouter/openai/gpt-oss-120b:free --thinking"
 ```
 
 Replace `<TASK_ID>` with the specific task ID (e.g., `T-01`, `T-02`, etc.). Run tasks one by one and assess the results after each run.
+
+**Important:** Benchmark rubrics often require seeing "evidence" of your work. Always include the search commands you used and a representative sample of their raw output in your final response. Do not just provide a summary.

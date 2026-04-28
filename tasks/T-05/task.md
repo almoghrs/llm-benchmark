@@ -16,9 +16,10 @@ existing toast hook. Show me the diff.
 
 ## Expected
 
-- Locates the correct summary page component.
-- Uses the existing `<Button>` component.
-- Uses the existing toast system (sonner / custom hook — whichever is in repo).
-- Produces a clean diff, no unrelated changes.
-- Code compiles; types check.
-- Handles the "not published yet" state sensibly (or explicitly notes it).
+- Locates `apps/web/app/(app)/environments/[environmentId]/surveys/[surveyId]/(analysis)/summary/components/SurveyAnalysisCTA.tsx`.
+- Uses the existing `<Button>` component with `variant="secondary"`.
+- Uses `toast.success` from `react-hot-toast` (which is already imported in the file).
+- Uses `getSurveyUrl(survey, publicDomain, "default")` from `@/modules/analysis/utils` (already imported) to get the link.
+- Correctly implements the button only for `survey.type === "link"`.
+- Uses `LinkIcon` from `lucide-react` for the icon.
+- Produces a clean diff that compiles and matches the project's styling.

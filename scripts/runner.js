@@ -45,7 +45,7 @@ function extractPromptAndExpected(taskId) {
   };
 }
 
-async function runTask(taskId, modelCmd) {
+async function runTask(taskId, modelCmd, isVerbose, isJson) {
   let prompt, expected;
   try {
     const extracted = extractPromptAndExpected(taskId);
@@ -72,16 +72,53 @@ async function runTask(taskId, modelCmd) {
   const startTime = Date.now();
   let agentOutput = '';
 
+  const baseCmd = modelCmd.includes('{{PROMPT}}') 
+    ? modelCmd.replace('{{PROMPT}}', '"$BENCHMARK_PROMPT"')
+    : `${modelCmd} run ${isVerbose && modelCmd.startsWith('opencode') ? '--log-level DEBUG --print-logs ' : ''}"$BENCHMARK_PROMPT"`;
+
+  const fullCmd = (isJson && modelCmd.startsWith('opencode')) ? `${baseCmd} --format json` : baseCmd;
+
   try {
-    const result = execSync(`${modelCmd} run "$BENCHMARK_PROMPT"`, { 
+    const result = execSync(fullCmd, { 
       cwd: FORMBRICKS_DIR, 
       env: { ...process.env, BENCHMARK_PROMPT: prompt },
       stdio: ['pipe', 'pipe', 'pipe']
     });
-    agentOutput = result.toString();
+    
+    const output = result.toString();
+    if (isJson && modelCmd.startsWith('opencode')) {
+        const lines = output.trim().split('\n');
+        for (const line of lines) {
+            try {
+                const event = JSON.parse(line);
+                if (event.type === 'text') {
+                    agentOutput += event.part.text;
+                } else if (event.type === 'tool_use') {
+                    agentOutput += `\n[TOOL CALL: ${event.part.tool}]\nInput: ${JSON.stringify(event.part.state.input)}\nOutput: ${event.part.state.output}\n`;
+                }
+            } catch (e) {}
+        }
+    } else {
+        agentOutput = output;
+    }
     console.log(agentOutput);
   } catch (error) {
-    agentOutput = error.stdout ? error.stdout.toString() : '';
+    const errorOutput = error.stdout ? error.stdout.toString() : '';
+    if (isJson && modelCmd.startsWith('opencode')) {
+        const lines = errorOutput.trim().split('\n');
+        for (const line of lines) {
+            try {
+                const event = JSON.parse(line);
+                if (event.type === 'text') {
+                    agentOutput += event.part.text;
+                } else if (event.type === 'tool_use') {
+                    agentOutput += `\n[TOOL CALL: ${event.part.tool}]\nInput: ${JSON.stringify(event.part.state.input)}\nOutput: ${event.part.state.output}\n`;
+                }
+            } catch (e) {}
+        }
+    } else {
+        agentOutput = errorOutput;
+    }
     agentOutput += '\n' + (error.stderr ? error.stderr.toString() : '');
     console.log(agentOutput);
     console.error(`\n⚠️ Agent execution exited with error.`);
@@ -105,16 +142,47 @@ Please provide a detailed assessment of whether the agent output meets the expec
 `;
 
   let assessmentOutput = '';
+  const baseAssessmentCmd = modelCmd.includes('{{PROMPT}}')
+    ? modelCmd.replace('{{PROMPT}}', '"$ASSESSMENT_PROMPT"')
+    : `${modelCmd} run ${isVerbose && modelCmd.startsWith('opencode') ? '--log-level DEBUG --print-logs ' : ''}"$ASSESSMENT_PROMPT"`;
+
+  const fullAssessmentCmd = (isJson && modelCmd.startsWith('opencode')) ? `${baseAssessmentCmd} --format json` : baseAssessmentCmd;
+
   try {
-    const result = execSync(`${modelCmd} run "$ASSESSMENT_PROMPT"`, { 
+    const result = execSync(fullAssessmentCmd, { 
       cwd: FORMBRICKS_DIR, 
       env: { ...process.env, ASSESSMENT_PROMPT: assessmentPrompt },
       stdio: ['pipe', 'pipe', 'pipe']
     });
-    assessmentOutput = result.toString();
+    
+    const output = result.toString();
+    if (isJson && modelCmd.startsWith('opencode')) {
+        const lines = output.trim().split('\n');
+        for (const line of lines) {
+            try {
+                const event = JSON.parse(line);
+                if (event.type === 'text') {
+                    assessmentOutput += event.part.text;
+                }
+            } catch (e) {}
+        }
+    } else {
+        assessmentOutput = output;
+    }
     console.log(assessmentOutput);
   } catch (error) {
-    assessmentOutput = error.stdout ? error.stdout.toString() : '';
+    const errorOutput = error.stdout ? error.stdout.toString() : '';
+    if (isJson && modelCmd.startsWith('opencode')) {
+        const lines = errorOutput.trim().split('\n');
+        for (const line of lines) {
+            try {
+                const event = JSON.parse(line);
+                if (event.type === 'text') assessmentOutput += event.part.text;
+            } catch (e) {}
+        }
+    } else {
+        assessmentOutput = errorOutput;
+    }
     assessmentOutput += '\n' + (error.stderr ? error.stderr.toString() : '');
     console.log(assessmentOutput);
     console.error(`\n⚠️ Assessment execution failed.`);
@@ -145,11 +213,14 @@ ${assessmentOutput}
 const args = process.argv.slice(2);
 const taskId = args.find(a => a.startsWith('T-'));
 const modelCmdIndex = args.indexOf('--cmd');
+const isVerbose = args.includes('--verbose');
+const isJson = args.includes('--json');
 
 if (!taskId || modelCmdIndex === -1) {
-  console.log('Usage: node runner.js T-01 --cmd "opencode"');
+  console.log('Usage: node runner.js T-01 --cmd "opencode" [--verbose] [--json]');
   process.exit(1);
 }
 
-const modelCmd = args[modelCmdIndex + 1];
-runTask(taskId, modelCmd);
+let modelCmd = args[modelCmdIndex + 1];
+
+runTask(taskId, modelCmd, isVerbose, isJson);

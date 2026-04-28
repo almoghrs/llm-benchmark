@@ -1,4 +1,4 @@
-# T-03 - Find usages of a component
+# T-03 - Explain the Button component usage
 
 **Category:** Explain
 **Difficulty:** ●○○○○
@@ -15,8 +15,8 @@ cases where it's re-exported under a different name? Flag those.
 
 ## Expected
 
-- Locates the Button file first (doesn't assume path).
-- Uses grep/search tool, not guesses.
-- Returns a grouped list by module path.
-- Identifies re-exports correctly (or states none exist).
-- Flags if results were truncated.
+- Correctly identifies the primary Button location (`apps/web/modules/ui/components/button/index.tsx`).
+- Identifies that there are over 200 imports (specifically 211 as of the current snapshot) across the `apps/web` directory.
+- Groups usages into feature modules like `survey`, `organization`, `ee`, `auth`, `projects`, etc.
+- Correctly identifies that it is NOT re-exported under a different name (aliased) in the `apps/web` directory.
+- Differentiates between the dashboard button (`apps/web`) and the survey widget button (`packages/survey-ui`).

@@ -23,9 +23,11 @@ Base everything on files you actually read. Cite file paths. Do not invent.
 
 ## Expected
 
-- Identifies turborepo with `apps/web` and `packages/*` (database, cache, email, surveys, etc.).
-- Correctly names Next.js App Router, Prisma, NextAuth.
-- Points to `apps/web/modules/` as the main domain split.
-- Names real core models: Survey, Response, Organization, Project, Environment, Contact, Webhook.
-- Mentions the `ee/` folder for enterprise-licensed features.
-- No hallucinations (e.g. "Drizzle", "tRPC router" — wrong).
+- Identifies turborepo with `apps/web` (Next.js) and `packages/*` (database, cache, email, storage, ai, types, etc.).
+- Correctly names Next.js App Router, Prisma, and identifies the API v2 structure in `apps/web/modules/api/v2`.
+- Points to `apps/web/modules/` as the primary domain-driven organization for feature logic.
+- Names core Prisma models: `Organization`, `Project`, `Environment`, `Survey`, `Response`, `Contact`, `Webhook`.
+- Mentions the `apps/web/modules/ee/` directory for enterprise features.
+- Identifies Redis as the cache provider (via `packages/cache`) and PostgreSQL as the primary DB.
+- Cites actual file paths like `packages/database/schema.prisma` or `apps/web/modules/api/v2/auth/authenticate-request.ts`.
+- No hallucinations of tech stack (e.g. no mentions of "GraphQL", "TypeORM").

@@ -16,8 +16,12 @@ fields that tell you.
 
 ## Expected
 
-- Gets the Organization → Project → Environment → Survey hierarchy right.
-- Correctly identifies Response belongs to Survey.
-- Points to the actual FK fields (e.g. `environmentId`).
-- Doesn't invent fields that don't exist.
-- Concise; no padding.
+- Correctly identifies the hierarchy: `Organization` → `Project` → `Environment` → `Survey`.
+- Explains that `Organization` is the top-level entity.
+- Explains that `Project` belongs to `Organization` via `organizationId`.
+- Explains that `Environment` belongs to `Project` via `projectId`.
+- Explains that `Survey` belongs to `Environment` via `environmentId`.
+- Explains that `Response` belongs to `Survey` via `surveyId`.
+- Identifies that `Organization` and `Project` are "global" in the sense that they don't have an `environmentId`.
+- Identifies that `Survey`, `Response`, `Tag`, `Webhook`, `Contact`, etc., are "environment-scoped" because they contain an `environmentId` field.
+- Concise and accurate based on the `schema.prisma` file.

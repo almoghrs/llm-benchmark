@@ -20,9 +20,10 @@ bypasses of the existing data layer.
 
 ## Expected
 
-- Creates a real Prisma migration via the project's migration tool.
-- Backend action/route uses the existing auth + env helpers.
-- List sort integrates with the existing query / sort parameters.
-- Optimistic update uses the project's data-fetching hook, not raw state.
-- No broken types; no TODOs left behind.
-- Works end-to-end if you'd actually run it.
+- Adds `isPinned Boolean @default(false)` to the `Survey` model in `packages/database/schema.prisma`.
+- Updates `getSurveyOrderBy` in `apps/web/modules/survey/list/lib/survey-page.ts` to prepend `{ isPinned: "desc" }` to the sort arrays.
+- Implements a new Server Action `toggleSurveyPinAction` in `apps/web/modules/survey/list/actions.ts` using `authenticatedActionClient`.
+- Adds the pin toggle UI to `apps/web/modules/survey/list/components/survey-card.tsx` (e.g., next to the survey name).
+- Uses `useMutation` (or similar project pattern) with `onMutate` for a real optimistic update that updates the local cache for `useSurveys`.
+- Ensures the migration is created using the project's established Prisma workflow.
+- No broken types; the `TSurvey` and `TSurveyListItem` types should be updated to include `isPinned`.

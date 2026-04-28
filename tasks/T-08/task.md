@@ -1,4 +1,4 @@
-# T-08 - Debug a planted bug
+# T-08 - Fix a bug in a complex service
 
 **Category:** Debug
 **Difficulty:** ●●●○○
@@ -13,8 +13,8 @@ Investigate and propose a fix.
 
 ## Expected
 
-- Doesn't immediately patch — reads the filtering code or asks about repro first.
-- Finds the *planted* bug, not a plausible-but-wrong one.
-- Explains *why* the bug causes the symptom.
-- Fix is minimal and targeted.
-- Flags if it found the bug but isn't 100% sure that's the one.
+- Locates the `buildWhereClause` function in `apps/web/lib/response/utils.ts`.
+- Correctly identifies that the `createdAt` filter uses `lt` (less than) for the maximum date instead of `lte` (less than or equal to).
+- Proposes changing `lt` to `lte` to include responses submitted exactly at the boundary of the date range.
+- Explains why this causes issues (e.g., when the max date is set to the end of a day, anything within that last second or at that exact timestamp might be excluded).
+- No unrelated changes.
