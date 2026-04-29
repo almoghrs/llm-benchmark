@@ -1,8 +1,6 @@
-# Agent Instructions (AGENTS.md / GEMINI.md)
+# Agent Instructions
 
-Welcome! If you are an autonomous agent (like Gemini CLI or OpenCode) working in this repository, please adhere to the following guidelines:
-
-## Core Mandates
+**Mandatory Isolation:** You MUST NEVER perform the benchmark tasks (T-01, etc.) directly in this conversation. Doing so exposes the evaluation rubrics to your context, which invalidates the benchmark. ALWAYS use the provided runner scripts (`scripts/runner.js` or `scripts/runner-gemini.js`) to invoke a separate agent instance for the task.
 
 1. **Do not modify the benchmark tasks:** Unless explicitly requested by the user, do not alter the `tasks/` directory, task prompts, or rubrics.
 2. **Use the Runner Script:** When asked to benchmark a model or run a task, always use the `scripts/runner.js` utility. It handles repo state resets and evaluation automatically.

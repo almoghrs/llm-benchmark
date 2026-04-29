@@ -19,7 +19,7 @@ production-grade, taking this codebase's existing patterns into account.
 
 ## Expected
 
-- Catches: request timeout (for large files), memory blow-up (parsing unlimited CSV in memory), long transaction holding locks (blocking other DB operations), no partial progress (all-or-nothing failure is bad for UX), no dedupe on email.
-- Proposes: async processing (e.g., using `setImmediate` or a real queue), streaming parse (if file is large), chunked inserts (to keep transactions short), per-row error collection, progress reporting.
-- References the existing `createContactsFromCSV` implementation in `apps/web/modules/ee/contacts/lib/contacts.ts` as a production-grade reference (it uses metadata extraction, lookup maps, and chunking).
-- Considers: environment-scoping (multi-tenancy), duplicate-handling (skip vs update vs overwrite), and performance optimization via lookup maps (to avoid 1 query per row).
+- Catches: request timeout, memory blow-up, long transaction holding locks, no partial progress, no idempotency, no dedupe on email.
+- Proposes: async processing, streaming parse, chunked inserts, per-row error collection, progress reporting.
+- References the codebase's existing async/queue or background-job patterns, not generic advice.
+- Considers: environment-scoping, rate-limits, duplicate-handling, observability.
