@@ -4,7 +4,9 @@ const { execSync } = require('child_process');
 
 const TASKS_DIR = path.join(__dirname, '../tasks');
 const FORMBRICKS_DIR = path.join(__dirname, '../formbricks');
-const CSV_LOG_PATH = path.join(__dirname, '../benchmark_results.csv');
+
+const DEFAULT_AGENT = 'opencode';
+const DEFAULT_MODEL = 'github-copilot/claude-sonnet-4.6';
 
 function resetRepo() {
   console.log(`\n🔄 Resetting ${FORMBRICKS_DIR} to a clean state...`);
@@ -12,15 +14,12 @@ function resetRepo() {
   execSync('git clean -fd', { cwd: FORMBRICKS_DIR, stdio: 'inherit' });
 }
 
-function appendToCsv(runId, taskId, category, prompts, timeMin, quality, hallucinations, compiles, verdict, notes) {
-  if (!fs.existsSync(CSV_LOG_PATH)) {
-    fs.writeFileSync(CSV_LOG_PATH, 'run_id,date,model,model_version,infra,evaluator\n', 'utf-8');
-    fs.appendFileSync(CSV_LOG_PATH, `run_id,task_id,category,prompts,time_min,quality_5,hallucinations,compiles,verdict,notes\n`);
+function runSetup(taskId) {
+  const setupPath = path.join(TASKS_DIR, taskId, 'setup.sh');
+  if (fs.existsSync(setupPath)) {
+    console.log(`\n⚙️  Running pre-setup for ${taskId}...`);
+    execSync(`bash "${setupPath}"`, { cwd: FORMBRICKS_DIR, stdio: 'inherit' });
   }
-
-  const csvLine = `"${runId}","${taskId}","${category}","${prompts}","${timeMin}","${quality}","${hallucinations}","${compiles}","${verdict}","${notes}"\n`;
-  fs.appendFileSync(CSV_LOG_PATH, csvLine);
-  console.log(`📝 Logged result for ${taskId} to ${CSV_LOG_PATH}`);
 }
 
 function extractPromptAndExpected(taskId) {
@@ -28,109 +27,121 @@ function extractPromptAndExpected(taskId) {
   if (!fs.existsSync(taskMdPath)) {
     throw new Error(`Task ${taskId} not found at ${taskMdPath}`);
   }
-  
+
   const content = fs.readFileSync(taskMdPath, 'utf-8');
-  
-  // Extract prompt
+
   const promptMatch = content.match(/## Prompt\n\n```text\n([\s\S]*?)\n```/);
   const expectedMatch = content.match(/## Expected\n\n([\s\S]*?)$/);
-  
+
   if (!promptMatch || !expectedMatch) {
     throw new Error(`Could not parse prompt or expected rubric from ${taskMdPath}`);
   }
-  
+
   return {
     prompt: promptMatch[1].trim(),
-    expected: expectedMatch[1].trim()
+    expected: expectedMatch[1].trim(),
   };
 }
 
-async function runTask(taskId, modelCmd, isVerbose, isJson) {
+/**
+ * Build the shell command for a given agent.
+ * The prompt is passed via the BENCHMARK_PROMPT env var in all cases.
+ * Returns { cmd, parseJson }
+ */
+function buildAgentCmd(agent, model, isVerbose, isJson) {
+  if (agent === 'gemini') {
+    const debugFlag = isVerbose ? ' --debug' : '';
+    return {
+      cmd: `gemini -m ${model} -p "$BENCHMARK_PROMPT" -y -o text${debugFlag}`,
+      parseJson: false,
+    };
+  }
+
+  // opencode (default)
+  const verboseFlag = isVerbose ? '--log-level DEBUG --print-logs ' : '';
+  const jsonFlag = isJson ? ' --format json' : '';
+  return {
+    cmd: `opencode run ${verboseFlag}"$BENCHMARK_PROMPT" -m ${model}${jsonFlag}`,
+    parseJson: isJson,
+  };
+}
+
+function extractTextFromJsonStream(raw) {
+  let text = '';
+  for (const line of raw.trim().split('\n')) {
+    try {
+      const event = JSON.parse(line);
+      if (event.type === 'text') {
+        text += event.part.text;
+      } else if (event.type === 'tool_use') {
+        text += `\n[TOOL CALL: ${event.part.tool}]\nInput: ${JSON.stringify(event.part.state.input)}\nOutput: ${event.part.state.output}\n`;
+      }
+    } catch (_) {}
+  }
+  return text || raw; // fall back to raw if nothing parsed
+}
+
+function execAgent(cmd, promptValue, parseJson) {
+  let output = '';
+  try {
+    const result = execSync(cmd, {
+      cwd: FORMBRICKS_DIR,
+      env: { ...process.env, BENCHMARK_PROMPT: promptValue },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    const raw = result.toString();
+    output = parseJson ? extractTextFromJsonStream(raw) : raw;
+  } catch (error) {
+    const raw = error.stdout ? error.stdout.toString() : '';
+    output = parseJson ? extractTextFromJsonStream(raw) : raw;
+    output += '\n' + (error.stderr ? error.stderr.toString() : '');
+    console.error(`\n⚠️  Command exited with non-zero status.`);
+  }
+  return output;
+}
+
+function extractScore(text) {
+  // "3/5", "3 / 5", "3 out of 5"
+  const m1 = text.match(/\b([0-5])(?:\.\d+)?\s*(?:\/\s*5|out\s+of\s+5)/i);
+  if (m1) return parseFloat(m1[1]);
+  // "Score: 3", "quality score of 3"
+  const m2 = text.match(/(?:score|quality)[^\d]*([0-5])(?:\.\d+)?/i);
+  if (m2) return parseFloat(m2[1]);
+  return null;
+}
+
+async function runTask(taskId, agent, model, isVerbose, isJson) {
   let prompt, expected;
   try {
-    const extracted = extractPromptAndExpected(taskId);
-    prompt = extracted.prompt;
-    expected = extracted.expected;
+    ({ prompt, expected } = extractPromptAndExpected(taskId));
   } catch (err) {
     console.error(`❌ ${err.message}`);
-    process.exit(1);
+    return { taskId, status: 'failed', score: null, error: err.message };
   }
 
-  console.log(`\n🚀 Starting Benchmark for Task: ${taskId}`);
-  console.log(`=========================================`);
+  console.log(`\n${'='.repeat(50)}`);
+  console.log(`🚀  ${taskId}  |  agent=${agent}  model=${model}`);
+  console.log(`${'='.repeat(50)}`);
   console.log(prompt);
-  console.log(`=========================================\n`);
+  console.log(`${'='.repeat(50)}\n`);
 
   resetRepo();
+  runSetup(taskId);
 
-  if (taskId === 'T-08') {
-    console.log(`🐛 Running pre-setup for T-08: Planting bug...`);
-    execSync('node ../scripts/plant-bug.js', { cwd: FORMBRICKS_DIR, stdio: 'inherit' });
-  }
+  const { cmd, parseJson } = buildAgentCmd(agent, model, isVerbose, isJson);
+  console.log(`🤖  Running: ${cmd}\n`);
 
-  console.log(`🤖 Invoking agent: ${modelCmd}`);
   const startTime = Date.now();
-  let agentOutput = '';
-
-  const baseCmd = modelCmd.includes('{{PROMPT}}') 
-    ? modelCmd.replace('{{PROMPT}}', '"$BENCHMARK_PROMPT"')
-    : `${modelCmd} run ${isVerbose && modelCmd.startsWith('opencode') ? '--log-level DEBUG --print-logs ' : ''}"$BENCHMARK_PROMPT"`;
-
-  const fullCmd = (isJson && modelCmd.startsWith('opencode')) ? `${baseCmd} --format json` : baseCmd;
-
-  try {
-    const result = execSync(fullCmd, { 
-      cwd: FORMBRICKS_DIR, 
-      env: { ...process.env, BENCHMARK_PROMPT: prompt },
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
-    
-    const output = result.toString();
-    if (isJson && modelCmd.startsWith('opencode')) {
-        const lines = output.trim().split('\n');
-        for (const line of lines) {
-            try {
-                const event = JSON.parse(line);
-                if (event.type === 'text') {
-                    agentOutput += event.part.text;
-                } else if (event.type === 'tool_use') {
-                    agentOutput += `\n[TOOL CALL: ${event.part.tool}]\nInput: ${JSON.stringify(event.part.state.input)}\nOutput: ${event.part.state.output}\n`;
-                }
-            } catch (e) {}
-        }
-    } else {
-        agentOutput = output;
-    }
-    console.log(agentOutput);
-  } catch (error) {
-    const errorOutput = error.stdout ? error.stdout.toString() : '';
-    if (isJson && modelCmd.startsWith('opencode')) {
-        const lines = errorOutput.trim().split('\n');
-        for (const line of lines) {
-            try {
-                const event = JSON.parse(line);
-                if (event.type === 'text') {
-                    agentOutput += event.part.text;
-                } else if (event.type === 'tool_use') {
-                    agentOutput += `\n[TOOL CALL: ${event.part.tool}]\nInput: ${JSON.stringify(event.part.state.input)}\nOutput: ${event.part.state.output}\n`;
-                }
-            } catch (e) {}
-        }
-    } else {
-        agentOutput = errorOutput;
-    }
-    agentOutput += '\n' + (error.stderr ? error.stderr.toString() : '');
-    console.log(agentOutput);
-    console.error(`\n⚠️ Agent execution exited with error.`);
-  }
+  const agentOutput = execAgent(cmd, prompt, parseJson);
+  console.log(agentOutput);
 
   const timeMin = Math.round((Date.now() - startTime) / 60000);
-  console.log(`\n⏱️  Task execution took ~${timeMin} minutes.`);
+  console.log(`\n⏱️   Task execution took ~${timeMin} minutes.`);
 
-  console.log(`\n⚖️ Generating Assessment...`);
-  
-  const assessmentPrompt = `
-You are an expert evaluator. Compare the following agent output against the expected rubric.
+  // --- Assessment ---
+  console.log(`\n⚖️   Generating Assessment...`);
+
+  const assessmentPrompt = `You are an expert evaluator. Compare the following agent output against the expected rubric.
 
 Expected Rubric:
 ${expected}
@@ -138,58 +149,17 @@ ${expected}
 Agent Output:
 ${agentOutput}
 
-Please provide a detailed assessment of whether the agent output meets the expected rubric, and assign a final quality score (0-5).
-`;
+Please provide a detailed assessment of whether the agent output meets the expected rubric, and assign a final quality score (0-5).`;
 
-  let assessmentOutput = '';
-  const baseAssessmentCmd = modelCmd.includes('{{PROMPT}}')
-    ? modelCmd.replace('{{PROMPT}}', '"$ASSESSMENT_PROMPT"')
-    : `${modelCmd} run ${isVerbose && modelCmd.startsWith('opencode') ? '--log-level DEBUG --print-logs ' : ''}"$ASSESSMENT_PROMPT"`;
+  // Assessment always uses default (non-verbose, non-json) flags for cleanliness
+  const { cmd: assessCmd, parseJson: assessParseJson } = buildAgentCmd(agent, model, false, false);
+  const assessmentText = execAgent(assessCmd, assessmentPrompt, assessParseJson);
+  console.log(assessmentText);
 
-  const fullAssessmentCmd = (isJson && modelCmd.startsWith('opencode')) ? `${baseAssessmentCmd} --format json` : baseAssessmentCmd;
-
-  try {
-    const result = execSync(fullAssessmentCmd, { 
-      cwd: FORMBRICKS_DIR, 
-      env: { ...process.env, ASSESSMENT_PROMPT: assessmentPrompt },
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
-    
-    const output = result.toString();
-    if (isJson && modelCmd.startsWith('opencode')) {
-        const lines = output.trim().split('\n');
-        for (const line of lines) {
-            try {
-                const event = JSON.parse(line);
-                if (event.type === 'text') {
-                    assessmentOutput += event.part.text;
-                }
-            } catch (e) {}
-        }
-    } else {
-        assessmentOutput = output;
-    }
-    console.log(assessmentOutput);
-  } catch (error) {
-    const errorOutput = error.stdout ? error.stdout.toString() : '';
-    if (isJson && modelCmd.startsWith('opencode')) {
-        const lines = errorOutput.trim().split('\n');
-        for (const line of lines) {
-            try {
-                const event = JSON.parse(line);
-                if (event.type === 'text') assessmentOutput += event.part.text;
-            } catch (e) {}
-        }
-    } else {
-        assessmentOutput = errorOutput;
-    }
-    assessmentOutput += '\n' + (error.stderr ? error.stderr.toString() : '');
-    console.log(assessmentOutput);
-    console.error(`\n⚠️ Assessment execution failed.`);
-  }
+  const score = extractScore(assessmentText);
 
   const assessmentMdPath = path.join(TASKS_DIR, taskId, 'assessment.md');
-  const assessmentContent = `# Assessment for ${taskId}
+  fs.writeFileSync(assessmentMdPath, `# Assessment for ${taskId}
 
 ## Agent Output
 
@@ -199,28 +169,34 @@ ${agentOutput}
 
 ## Evaluation
 
-${assessmentOutput}
-`;
+${assessmentText}
+`, 'utf-8');
 
-  fs.writeFileSync(assessmentMdPath, assessmentContent, 'utf-8');
-  console.log(`\n✅ Saved output and assessment to ${assessmentMdPath}`);
-  
-  console.log(`\nNext steps:`);
-  console.log(`1. Review the assessment in ${assessmentMdPath}.`);
-  console.log(`2. Log the results manually or automate using appendToCsv().`);
+  console.log(`\n✅  Saved assessment to ${assessmentMdPath}`);
+  if (score !== null) console.log(`   Score: ${score}/5`);
+
+  return { taskId, status: 'success', score, timeMin };
 }
 
+// --- CLI ---
 const args = process.argv.slice(2);
-const taskId = args.find(a => a.startsWith('T-'));
-const modelCmdIndex = args.indexOf('--cmd');
+const taskId = args.find(a => /^T-\d+$/.test(a));
+const agentIdx = args.indexOf('--agent');
+const modelIdx = args.indexOf('--model');
 const isVerbose = args.includes('--verbose');
 const isJson = args.includes('--json');
 
-if (!taskId || modelCmdIndex === -1) {
-  console.log('Usage: node runner.js T-01 --cmd "opencode" [--verbose] [--json]');
+const agent = agentIdx !== -1 ? args[agentIdx + 1] : DEFAULT_AGENT;
+const model = modelIdx !== -1 ? args[modelIdx + 1] : DEFAULT_MODEL;
+
+if (!taskId) {
+  console.log('Usage: node runner.js <TASK_ID> [--agent opencode|gemini] [--model <model>] [--verbose] [--json]');
+  console.log(`Defaults: --agent ${DEFAULT_AGENT}  --model ${DEFAULT_MODEL}`);
   process.exit(1);
 }
 
-let modelCmd = args[modelCmdIndex + 1];
+runTask(taskId, agent, model, isVerbose, isJson).then(result => {
+  if (result.status === 'failed') process.exit(1);
+});
 
-runTask(taskId, modelCmd, isVerbose, isJson);
+module.exports = { runTask, DEFAULT_AGENT, DEFAULT_MODEL };
