@@ -19,7 +19,7 @@ existing toast hook. Show me the diff.
 - Locates `apps/web/app/(app)/environments/[environmentId]/surveys/[surveyId]/(analysis)/summary/components/SurveyAnalysisCTA.tsx`.
 - Uses the existing `<Button>` component with `variant="secondary"`.
 - Uses `toast.success` from `react-hot-toast` (which is already imported in the file).
-- Uses `getSurveyUrl(survey, publicDomain, "default")` from `@/modules/analysis/utils` (already imported) to get the link.
+- Uses `getSurveyUrl(survey, publicDomain, "default")` from `@/modules/analysis/utils` (already imported) to get the link — not a hand-rolled template string.
 - Correctly implements the button only for `survey.type === "link"`.
-- Uses `LinkIcon` from `lucide-react` for the icon.
+- Uses a semantically appropriate icon from `lucide-react` (e.g. `LinkIcon` or `Copy`).
 - Produces a clean diff that compiles and matches the project's styling.

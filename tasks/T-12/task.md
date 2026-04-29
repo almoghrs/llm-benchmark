@@ -21,5 +21,5 @@ production-grade, taking this codebase's existing patterns into account.
 
 - Catches: request timeout, memory blow-up, long transaction holding locks, no partial progress, no idempotency, no dedupe on email.
 - Proposes: async processing, streaming parse, chunked inserts, per-row error collection, progress reporting.
-- References the codebase's existing async/queue or background-job patterns, not generic advice.
+- Acknowledges that **this codebase has no existing job-queue infrastructure**. A production-grade rewrite must therefore propose adding one (e.g. BullMQ over the existing Redis instance used for rate-limiting). Proposing a generic queue approach is acceptable; penalise vague "use a background worker" advice only if it ignores the absence of existing infrastructure and offers no concrete starting point.
 - Considers: environment-scoping, rate-limits, duplicate-handling, observability.
