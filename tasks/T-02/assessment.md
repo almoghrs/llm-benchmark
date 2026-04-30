@@ -3,45 +3,63 @@
 ## Agent Output
 
 ```text
-I will read the `packages/database/schema.prisma` file to understand the entities and their relationships.
+## Main Entities & Relationships
 
-The Formbricks schema follows a hierarchical structure designed for multi-tenancy and development-to-production workflows. The main entities are **Organizations**, **Projects**, **Environments**, **Surveys**, and **Responses**.
+**Hierarchy (global → environment-scoped):**
 
-### Relationships
-The hierarchy flows downward:
-*   **Organization** is the top-level container.
-*   **Project** relates to Organization (1:N) via the `organizationId` field.
-*   **Environment** relates to Project (1:N) via `projectId`. Each project typically contains "production" and "development" environments to isolate data.
-*   **Survey** relates to Environment (1:N) via `environmentId`.
-*   **Response** relates to Survey (1:N) via `surveyId`, capturing the data submitted by users.
+```
+Organization → Project → Environment → Survey → Response
+```
 
-### Scoping
-*   **Global Entities:** **User** and **Organization** are global. Users are linked to Organizations via the `Membership` model, allowing them to belong to multiple tenants.
-*   **Project-Scoped:** **Project** and **Language** are scoped to the project level (see `Language.projectId`). This allows shared settings across environments.
-*   **Environment-Scoped:** To ensure data isolation, most operational entities are environment-scoped. **Survey**, **Contact**, **ActionClass**, **Tag**, and **Webhook** all contain an `environmentId` field. **Response** is implicitly environment-scoped through its parent `Survey`. This allows developers to test surveys in a development environment without affecting production analytics.
+**Organization** (`Organization`) is the top-level tenant. It owns **Projects** via `Project.organizationId`. Organizations are global — no `environmentId` field anywhere on them.
+
+**Project** (`Project`) groups related apps/products. It holds org-wide config (styling, branding, `recontactDays`) and is global within an org — scoped only by `organizationId`, not by environment.
+
+**Environment** (`Environment`) is the bridge. Each Project gets exactly two environments (`type: production | development`, field: `Environment.projectId`). Almost every operational entity hangs off an environment via `environmentId` with `onDelete: Cascade`.
+
+**Survey** (`Survey`) lives in an environment (`Survey.environmentId`). It collects **Responses** (`Response.surveyId`) which are cascade-deleted with the survey.
+
+**Response** (`Response`) points to its parent survey (`surveyId`) and optionally to a **Contact** (`contactId`). Responses have no direct `environmentId` — environment is implied through the survey.
+
+**Environment-scoped entities** (all carry `environmentId`):
+- `Survey`, `Contact`, `ActionClass`, `ContactAttributeKey`, `Webhook`, `Tag`, `Segment`, `Integration`
+
+**Global entities** (no `environmentId`):
+- `Organization`, `Project`, `User`, `Team`, `Membership`, `ApiKey`, `Language` (scoped to `projectId`)
+
+The key tell: environment-scoped models have `environmentId String` + `environment Environment @relation(...)` and `@@index([environmentId])`. Global models don't.
 
 ```
 
 ## Evaluation
 
-The agent's output is an excellent and accurate reflection of the Formbricks data model as defined in a standard `schema.prisma` file. It meticulously addresses every point required by the rubric.
+## Evaluation
 
-### Rubric Checklist & Confidence Score:
-1. **Correctly identifies the hierarchy:** Yes (Organization → Project → Environment → Survey → Response).
-2. **Explains Organization is the top-level entity:** Yes.
-3. **Explains Project relationship via `organizationId`:** Yes.
-4. **Explains Environment relationship via `projectId`:** Yes.
-5. **Explains Survey relationship via `environmentId`:** Yes.
-6. **Explains Response relationship via `surveyId`:** Yes.
-7. **Identifies Organization and Project as "global" (no `environmentId`):** Yes (Agent categorizes Organization as Global and Project as Project-scoped, both correctly noting they sit above the environment level).
-8. **Identifies environment-scoped entities (Survey, Tag, Webhook, Contact, etc.):** Yes.
-9. **Concise and accurate based on `schema.prisma`:** Yes.
+**Rubric item-by-item assessment:**
 
-### Detailed Assessment:
-- **Accuracy:** The agent correctly identified the specific foreign key fields (`organizationId`, `projectId`, `environmentId`, `surveyId`) that establish the relationships. 
-- **Scoping Logic:** The agent went beyond a simple list by explaining *why* the hierarchy exists (e.g., development-to-production workflows and data isolation), which adds valuable context to the technical facts.
-- **Completeness:** It correctly identified that `Response` is linked to `Survey` and noted that while `Response` might not always carry the `environmentId` directly in every version of the schema, it is logically scoped to the environment through its parent. It also correctly identified other environment-scoped entities like `ActionClass` and `Tag`.
+| Rubric Requirement | Met? | Notes |
+|---|---|---|
+| Correctly identifies hierarchy: `Organization → Project → Environment → Survey` | Yes | Explicitly stated in the hierarchy block |
+| `Organization` is top-level entity | Yes | "top-level tenant" |
+| `Project` belongs to `Organization` via `organizationId` | Yes | "owns Projects via `Project.organizationId`" |
+| `Environment` belongs to `Project` via `projectId` | Yes | "field: `Environment.projectId`" |
+| `Survey` belongs to `Environment` via `environmentId` | Yes | "`Survey.environmentId`" |
+| `Response` belongs to `Survey` via `surveyId` | Yes | "`Response.surveyId`" |
+| `Organization` and `Project` are "global" (no `environmentId`) | Yes | Explicitly listed under "Global entities" |
+| Environment-scoped entities identified (Survey, Response, Tag, Webhook, Contact, etc.) | Mostly | `Survey`, `Contact`, `Webhook`, `Tag` are listed. `Response` is nuanced — the agent correctly notes it has no direct `environmentId` (implied through survey), which is accurate. |
+| Concise and accurate based on `schema.prisma` | Yes | Well-structured, adds useful detail without being verbose |
 
-### Final Score:
-**5/5**
+**Strengths:**
+- Covers every rubric point cleanly
+- Adds genuinely useful extra detail (cascade behavior, `production | development` types, `@@index` pattern)
+- The nuanced handling of `Response` (no direct `environmentId`, implied through survey) is a technically accurate observation that goes beyond the rubric in a positive way
+- Clean formatting makes the hierarchy immediately readable
+
+**Minor gaps:**
+- The rubric specifically calls out `Response` as environment-scoped via `surveyId`, but the agent correctly notes `Response` has no direct `environmentId` — this is accurate and arguably better than the rubric's simplified framing, not a real flaw
+- No material inaccuracies detected
+
+## Score: **5/5**
+
+The output fully satisfies every rubric requirement, is technically precise, and adds meaningful context (cascade behavior, environment type enum, index patterns) that strengthens rather than muddies the answer. No inaccuracies or omissions relative to the rubric criteria.
 

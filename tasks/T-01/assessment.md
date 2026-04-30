@@ -3,87 +3,231 @@
 ## Agent Output
 
 ```text
-I will start by exploring the monorepo layout and workspaces to understand the high-level structure.
-I will list the contents of the `apps` and `packages` directories to identify the workspaces and understand their roles.
-I will explore the `apps/web` directory to understand the backend and frontend architecture, and I'll also check `packages/database/prisma/schema.prisma` to analyze the data model.
-I will search for the `schema.prisma` file to locate the Prisma schema.
-I will examine the `apps/web/app` directory to understand the App Router structure.
-I will examine the `apps/web/lib` and `apps/web/modules` directories to understand the layering of data access.
-I will examine `apps/web/lib/auth.ts` to understand the authentication mechanism and explore the `ee` directory in `apps/web/modules` for enterprise features.
-I will check for the NextAuth configuration in `apps/web/app/api/auth/[...nextauth]/route.ts` or a similar path.
-I will read the contents of `apps/web/app/api/auth/[...nextauth]/route.ts`.
-I will now examine the Prisma schema to understand the data model.
-I have identified the key models in the data model, including `User`, `Organization`, `Project`, `Environment`, `Survey`, `Response`, `Contact`, and `ActionClass`. I will now investigate external dependencies by examining `docker-compose.yml` and `.env.example`.
-I've identified the external dependencies: PostgreSQL with `pgvector`, Redis (Valkey), optional S3, Stripe, and various external APIs for OAuth and integrations, along with Sentry and Unsplash. I'll now explore `apps/web/modules/ee` to understand the separation of enterprise features.
-The `ee` directory houses enterprise features such as `audit-logs` and `sso`. I'll now examine `apps/web/modules/ee/license-check` to understand how these features are enforced.
-I'll check the `apps/web/modules/ee/license-check/lib` directory for `utils.ts` or similar files.
-I will read the contents of `apps/web/modules/ee/license-check/lib/license.ts`.
-The license check mechanism fetches and caches license details from `ee.formbricks.com` to verify features like `sso` and `auditLogs`. I'll now examine `apps/web/modules/ee/audit-logs/lib/handler.ts` to see how these checks are implemented.
-I have identified the core components of the backend and frontend architecture, including API routes, data access layering, and authentication. I will now investigate the state management on the frontend by checking for the use of React Context or libraries like `zustand`.
-I see standard React Context and `reactCache` being used for state management and server-side caching. I'll now check `apps/web/package.json` for any additional state management libraries.
-I have identified the core architectural components, including the monorepo layout, backend and frontend structures, data model, and external dependencies. I'll now verify the naming convention for services, specifically checking for files like `apps/web/lib/survey/service.ts`, to ensure accurate documentation.
-They use `service.ts` within `lib/<feature>`. I'm now drafting the document.
-I've gathered the info for the architecture document and identified the key components. Since I'm in Plan Mode, I'll follow the workflow: outline the document, consult with the user, then draft the plan. I'll also check for an existing `ARCHITECTURE.md` to ensure my work is additive or consistent.
-I've confirmed there's no existing architecture document. I'll now propose an outline covering the monorepo layout, backend/frontend architecture, data model, external dependencies, and enterprise feature separation to the user for feedback.
-I've developed the plan and am now ready to present the strategy to the user for their agreement.
-I have explored the codebase and identified the key architectural patterns of Formbricks. I propose to structure the architecture document into the following six sections:
-
-1.  **Monorepo Layout & Workspaces**: Detail the role of `apps/web` as the main engine and how `packages/` provides shared logic for database, types, and UI.
-2.  **Backend Architecture**: Explain the Next.js API routes organization and the "Service" layer pattern found in `lib/` and `modules/`.
-3.  **Frontend Architecture**: Describe the App Router strategy, focusing on Server Components for data fetching and React Query for state management.
-4.  **Data Model**: Map out the core hierarchy from `Organization` down to `Response`, highlighting the 8 most critical Prisma models.
-5.  **External Dependencies**: List the infrastructure stack including PostgreSQL (with pgvector), Redis (Valkey), and third-party integrations like Stripe and Sentry.
-6.  **Enterprise Feature Separation**: Detail how features are segmented into `modules/ee` and the license verification mechanism.
-
-Does this structure cover everything you're looking for, or should I add more detail to any specific area?
+Here is the architecture document based on files actually read in the repository:
 
 ---
 
-# Architecture Document Plan - Formbricks
+# Formbricks Architecture Document
 
-## Objective
-Produce a comprehensive 2-page architecture document covering the Formbricks monorepo, backend/frontend architecture, data model, dependencies, and enterprise feature separation.
+## 1. Monorepo Layout
 
-## Proposed Document Structure
-1. **Monorepo Layout & Workspaces**: Overview of `apps/` and `packages/`.
-2. **Backend Architecture**: API routes, data access layering (lib/services), and auth.
-3. **Frontend Architecture**: App Router usage, server vs. client components, and state management.
-4. **Data Model**: High-level overview of key Prisma models (`User`, `Survey`, etc.).
-5. **External Dependencies**: PostgreSQL, Redis, Stripe, S3, etc.
-6. **Enterprise Features**: Separation of `ee` modules and license enforcement.
+**Config:** `pnpm-workspace.yaml`, `turbo.json`
 
-## Implementation Steps
-1. Draft the document based on the research performed.
-2. Ensure file paths are cited for accuracy.
-3. Deliver the document in the final response.
+The repo is a pnpm/Turborepo monorepo with two top-level workspace scopes:
 
-## Verification
-- Cross-reference cited paths with the codebase.
-- Ensure all 6 points requested by the user are covered.
+**`apps/`**
+| Workspace | Purpose |
+|---|---|
+| `apps/web` | Main Next.js 16 product (`@formbricks/web`) |
+| `apps/storybook` | Component browser for UI review |
+
+**`packages/`**
+| Package | Purpose |
+|---|---|
+| `@formbricks/database` | Prisma schema, migrations, and generated client |
+| `@formbricks/surveys` | Pre-compiled survey renderer (Vite → UMD + ESM), copied to `apps/web/public/js/` |
+| `@formbricks/survey-ui` | Survey UI React components consumed by the surveys bundle |
+| `@formbricks/js-core` | Browser SDK for embedding surveys in third-party sites |
+| `@formbricks/types` | Shared TypeScript type definitions |
+| `@formbricks/cache` | Redis-backed cache service (`CacheService`, distributed locking) |
+| `@formbricks/email` | Email template rendering and Nodemailer delivery |
+| `@formbricks/ai` | AI/LLM integration utilities |
+| `@formbricks/storage` | File storage abstraction (S3 / local filesystem) |
+| `@formbricks/logger` | Structured pino logger |
+| `@formbricks/i18n-utils` | i18n helpers |
+| `config-eslint/typescript/prettier` | Shared lint and formatting presets |
+
+Survey delivery is fully decoupled: the `@formbricks/surveys` bundle is built separately by Vite and served as a static asset. Any change to it requires a forced rebuild (`pnpm build --filter=@formbricks/surveys... --force`) before it takes effect in the running app.
 
 ---
-**Informal Agreement Required:** Please confirm if you agree with this strategy before I proceed to draft the full document.
+
+## 2. Backend Architecture
+
+### API Route Organization
+
+**`apps/web/app/api/`**
+
+| Route group | Description |
+|---|---|
+| `api/(internal)/pipeline/` | Internal server-to-server pipeline — fires webhooks, emails, integrations, billing meters, audit logs after every response event. Protected by `CRON_SECRET` header. |
+| `api/v1/`, `api/v2/`, `api/v3/` | Versioned public REST API. `v1/client/` is used by the JS SDK; `v1/management/` and `v2/management/` require API key auth. |
+| `api/auth/[...nextauth]/` | NextAuth.js catch-all handler |
+| `api/auth/saml/`, `api/auth/sso/` | SAML/SSO via `@boxyhq/saml-jackson` |
+| `api/billing/` | Stripe webhook receiver |
+
+There is **no background job queue**. All post-response side effects (webhooks, Slack/Notion/Airtable/Google Sheets integrations, follow-up emails) run synchronously inside the pipeline route — `apps/web/app/api/(internal)/pipeline/route.ts`.
+
+### Data Access Layering
+
+```
+API route / Server Action
+        ↓
+  modules/<feature>/lib/   — feature-level orchestration, server actions
+        ↓
+  apps/web/lib/<resource>/ — service functions (pure TS, no framework coupling)
+        ↓
+  @formbricks/database     — Prisma client
+```
+
+- **`apps/web/lib/`** contains per-resource service modules (`lib/survey/`, `lib/response/`, `lib/user/`, etc.). Services return `{ data }` or `{ error }` objects and never throw uncaught errors.
+- **`apps/web/modules/<feature>/lib/`** orchestrates across services for a specific product feature.
+- Server actions are wrapped with `next-safe-action` for type-safe input validation via Zod.
+
+### Authentication
+
+**`apps/web/modules/auth/lib/authOptions.ts`**
+
+- Library: `next-auth@4.24.13` with `@next-auth/prisma-adapter` (database sessions).
+- Providers: `CredentialsProvider` (email + bcrypt + TOTP), plus dynamically-loaded OAuth/SSO providers (GitHub, Google, AzureAD, OpenID Connect, SAML — all EE).
+- Rate limiting on login attempts via Redis (`applyIPRateLimit`).
+- Low-level helpers in `apps/web/lib/auth.ts`: `hashPassword`, `verifyPassword`, `hasOrganizationAccess`, `isManagerOrOwner`, `isOwner`.
+- JWT signing for email verification tokens: `apps/web/lib/jwt.ts`.
+- AES-256 encryption utilities: `apps/web/lib/crypto.ts`.
+
+---
+
+## 3. Frontend Architecture
+
+### App Router Usage
+
+**`apps/web/app/`** uses Next.js App Router with route groups:
+
+| Group | Purpose |
+|---|---|
+| `(app)/` | Authenticated product surface; nested under `environments/[environmentId]/` |
+| `(auth)/` | Unauthenticated pages (login, signup, invite, email verification) |
+| `(redirects)/` | Short-link redirect handlers |
+| `p/`, `s/`, `c/` | Public survey link renderer and short-URL handlers |
+
+### Server vs. Client Component Split
+
+- **Server components** handle all data fetching (direct service calls, no `fetch` waterfalls). Route layouts and page components are server-first.
+- **Client components** are scoped to interactive pieces: survey editor canvas, drag-and-drop (`@dnd-kit`), rich text (`lexical`), modals, command palette (`cmdk`), and animated transitions (`framer-motion`). They are marked `"use client"`.
+- `"server-only"` package (`apps/web/lib/cache/index.ts` and service modules) prevents accidental import into client bundles.
+
+### State Management
+
+- **Server state / data fetching:** `@tanstack/react-query` for client-side data that needs polling or cache invalidation.
+- **Form state:** `react-hook-form` + Zod resolvers.
+- **Server mutations:** `next-safe-action` server actions — no separate API call needed for most write operations.
+- No global client-side state library (no Redux/Zustand). Shared state uses React context, scoped to feature subtrees.
+
+---
+
+## 4. Data Model (Key Prisma Models)
+
+**`packages/database/schema.prisma`** — PostgreSQL with `pgvector` extension.
+
+```
+Organization ──< Project ──< Environment ──< Survey ──< Response
+                                        └──< Contact ──< ContactAttribute
+```
+
+| Model | Key relationships |
+|---|---|
+| **Organization** | Root tenant. Has `memberships` (→ User), `projects`, `billing`, `apiKeys`, `teams` (EE). |
+| **Project** | Groups environments. Has `styling`, `languages`, `projectTeams`. |
+| **Environment** | `production` or `development`. Scopes surveys, contacts, webhooks, integrations, actionClasses, segments. |
+| **Survey** | Full config: `questions` (JSON), `endings`, `hiddenFields`, `variables`, `triggers` (→ ActionClass), `attributeFilters` (→ Segment), `followUps`, `quotas`. `type`: `link` or `app`. |
+| **Response** | A submission. Has `data` (JSON), `variables`, `ttc`, `meta`, `tags` (→ Tag via `TagsOnResponses`), `contactAttributes` (JSON snapshot). |
+| **Contact** | A tracked person. Has `attributes` (→ ContactAttribute), `responses`, `displays`. |
+| **ActionClass** | Survey display triggers (code-based or no-code click/page rules). |
+| **Webhook** | Outbound HTTP webhook with `triggers` (enum: `responseCreated/Updated/Finished`) and optional HMAC `secret`. |
+| **ApiKey** | Org-scoped API key. Has `organizationAccess` (JSON) and per-environment permissions via `ApiKeyEnvironment`. |
+| **Team** (EE) | Sub-group within org. Has `teamUsers` and `projectTeams` with `read/readWrite/manage` roles. |
+
+---
+
+## 5. External Dependencies
+
+| Dependency | Used For |
+|---|---|
+| **PostgreSQL** | Primary database (all persistent data via Prisma). `pgvector` extension enabled for AI embedding storage. |
+| **Redis** | Request-level cache (environment state, org billing), API rate limiting, distributed locks (license fetch, cache stampede prevention). Connection via `REDIS_URL`. Gracefully degraded if absent — `packages/cache/src/client.ts`. |
+| **No job queue** | There is no Bull/BullMQ/etc. Post-response side effects run inline in the pipeline API route. |
+| **Stripe** | Billing, subscription management, usage metering. Webhook receiver at `api/billing/`. Package: `stripe@20.4.1`. |
+| **Nodemailer** | Transactional email delivery. Configured in `@formbricks/email`. |
+| **S3 / local filesystem** | File upload storage (survey attachments, images). Abstracted in `@formbricks/storage`. |
+| **PostHog** | Product analytics — both client-side (`posthog-js`) and server-side (`posthog-node`). |
+| **Sentry** | Error tracking (`@sentry/nextjs@10`). |
+| **BoxyHQ SAML Jackson** | SAML 2.0 SSO (EE). `@boxyhq/saml-jackson@26`. |
+| **Formbricks License Server** | `https://ee.formbricks.com/api/licenses/check` — validates `ENTERPRISE_LICENSE_KEY` for EE features. |
+
+---
+
+## 6. Enterprise / Paid Feature Separation
+
+**`apps/web/modules/ee/`** — all enterprise features are physically isolated under this directory, governed by a separate `LICENSE` file at `apps/web/modules/ee/LICENSE`.
+
+**EE modules:**
+
+| Module | Feature |
+|---|---|
+| `billing/` | Stripe plan management, usage metering |
+| `contacts/` | Advanced contact management and segmentation |
+| `sso/` | OAuth/SAML SSO provider configuration |
+| `two-factor-auth/` | TOTP 2FA enforcement |
+| `role-management/` | Fine-grained RBAC |
+| `teams/` | Team-based project access control |
+| `whitelabel/` | Custom branding / remove Formbricks branding |
+| `audit-logs/` | Audit event storage |
+| `quotas/` | Survey response quota enforcement |
+| `license-check/` | Runtime license validation |
+
+**License check architecture** (`apps/web/modules/ee/license-check/lib/license.ts`):
+
+1. `ENTERPRISE_LICENSE_KEY` env var is sent to the Formbricks license server.
+2. Result is cached in three layers: **in-process memory** (1 min) → **Redis** (24h on success, 10 min on failure) → **previous-result Redis key** (4 days, grace period).
+3. A **3-day grace period** keeps EE features active if the license server is temporarily unreachable and the last successful check was within 4 days.
+4. A **distributed lock** (`cache.tryLock`, 90s TTL) ensures only one instance fetches from the license server when the cache is cold.
+5. Feature flags returned by the license server: `isMultiOrgEnabled`, `twoFactorAuth`, `sso`, `whitelabel`, `contacts`, `aiSmartTools`, `aiDataAnalysis`, `saml`, `auditLogs`, `accessControl`, `quotas`, and others.
+
+OSS code never imports directly from `modules/ee/`; instead it calls entitlement checks (`modules/entitlements/`) which return booleans, keeping the open-source core free of enterprise coupling.
 
 ```
 
 ## Evaluation
 
-The agent's performance is excellent and demonstrates a deep, accurate understanding of the Formbricks codebase. It correctly identifies almost all the key architectural components specified in the rubric through a systematic research process.
+## Evaluation of Agent Output Against Rubric
 
-### Detailed Assessment against Rubric:
+### Rubric Criterion Assessment
 
-*   **Monorepo Layout & Workspaces:** **Success.** The agent correctly identifies the Turborepo structure, specifically naming `apps/web` as the main application and correctly identifying the purpose of various `packages/*` (database, cache, email, etc.).
-*   **Next.js App Router & Prisma:** **Success.** The agent explicitly identifies the use of Next.js App Router and Prisma. It also correctly notes the "Service" layer pattern.
-*   **API v2 Structure:** **Partial Success.** While the agent correctly identifies that API logic and domain organization reside in `apps/web/modules/`, it does not explicitly mention "API v2" by name in its summary, though it explored the directories where it is located.
-*   **Domain-Driven Organization:** **Success.** The agent correctly identifies `apps/web/modules/` as a primary location for feature logic and data access layering.
-*   **Core Prisma Models:** **Near Success.** The agent identifies `Organization`, `Project`, `Environment`, `Survey`, `Response`, and `Contact`. It missed `Webhook` in its summary list (listing `ActionClass` and `User` instead), but identified the vast majority of the core hierarchy.
-*   **Enterprise Features (`ee` directory):** **Success.** The agent specifically investigated `apps/web/modules/ee/`, correctly identifying its role in housing enterprise features like audit logs and SSO, and even researched the license enforcement mechanism.
-*   **Infrastructure (Redis/PostgreSQL):** **Success.** The agent accurately identifies PostgreSQL (with `pgvector`) and Redis (specifically mentioning the `Valkey` fork used in the project) as the primary data stores.
-*   **File Path Citations:** **Success.** The agent cites numerous accurate file paths, such as `apps/web/app/api/auth/[...nextauth]/route.ts`, `apps/web/modules/ee/license-check/lib/license.ts`, and `apps/web/lib/survey/service.ts`.
-*   **No Hallucinations:** **Success.** The agent stays strictly within the observed tech stack (Next.js, Prisma, Tailwind, Redis, etc.) without inventing mentions of GraphQL or other non-existent technologies.
+**1. Identifies turborepo with `apps/web` (Next.js) and `packages/*`**
+✅ Fully met. The output clearly identifies the pnpm/Turborepo monorepo structure, lists `apps/web` as "Main Next.js 16 product", and enumerates all major `packages/*` entries including `database`, `cache`, `email`, `storage`, `ai`, `types`, etc. with accurate descriptions.
 
-### Conclusion:
-The agent provided a high-signal, technically grounded output. The only minor omissions were the specific "v2" label for the API and the "Webhook" model in the final list, but these are offset by the high level of detail elsewhere (like identifying the Valkey fork and the specifics of the license check logic).
+**2. Correctly names Next.js App Router, Prisma, and identifies the API v2 structure in `apps/web/modules/api/v2`**
+⚠️ Partially met. Next.js App Router is correctly identified and described in detail. Prisma is correctly named throughout. However, the API v2 structure is listed as `apps/web/app/api/v2/` rather than `apps/web/modules/api/v2` — this is a structural inaccuracy. The rubric specifically calls out `apps/web/modules/api/v2/auth/authenticate-request.ts` as a path to cite, which is absent.
 
-**Final Quality Score: 4.5/5**
+**3. Points to `apps/web/modules/` as primary domain-driven organization**
+✅ Met. The output references `apps/web/modules/<feature>/lib/` as feature-level orchestration and explicitly discusses `apps/web/modules/ee/` for enterprise features. The modules directory is treated as a primary organizational unit throughout.
+
+**4. Names core Prisma models: Organization, Project, Environment, Survey, Response, Contact, Webhook**
+✅ Fully met. Section 4 explicitly covers all seven required models in a structured table with relationship descriptions. Also correctly identifies the hierarchy `Organization → Project → Environment → Survey → Response`.
+
+**5. Mentions `apps/web/modules/ee/` for enterprise features**
+✅ Fully met. Entire section 6 is dedicated to this, listing specific EE modules and the license check architecture with accurate detail.
+
+**6. Identifies Redis as cache provider (via `packages/cache`) and PostgreSQL as primary DB**
+✅ Fully met. Both are explicitly named in sections 4 and 5. `packages/cache` is listed in the monorepo table, Redis use cases are described accurately (rate limiting, distributed locks, cache layers), and PostgreSQL with `pgvector` is correctly identified.
+
+**7. Cites actual file paths**
+✅ Largely met. Numerous real paths are cited: `packages/database/schema.prisma`, `apps/web/modules/auth/lib/authOptions.ts`, `apps/web/lib/auth.ts`, `apps/web/lib/jwt.ts`, `apps/web/lib/crypto.ts`, `apps/web/app/api/(internal)/pipeline/route.ts`, `packages/cache/src/client.ts`, `apps/web/modules/ee/license-check/lib/license.ts`. The specific rubric-cited path `apps/web/modules/api/v2/auth/authenticate-request.ts` is absent, which is a minor gap.
+
+**8. No hallucinations of tech stack**
+✅ Fully met. No mentions of GraphQL, TypeORM, or other non-existent technologies. The stack described (NextAuth, Prisma, Redis, PostgreSQL, Stripe, Nodemailer, PostHog, Sentry, BoxyHQ) is consistent with a real Formbricks codebase. The claim of "Next.js 16" is slightly suspect (Next.js 16 is not a released version as of the knowledge cutoff; likely Next.js 15), but this is a minor factual imprecision rather than a hallucination of a missing technology.
+
+---
+
+### Summary
+
+The output is exceptional in depth, accuracy, and organization. It goes well beyond the rubric requirements in several areas (license check architecture, pipeline internals, auth layering, state management). The only meaningful gaps are:
+
+- The API v2 module path is mislocated (`apps/web/app/api/v2/` vs. `apps/web/modules/api/v2/`), and the specific file `authenticate-request.ts` is not cited.
+- "Next.js 16" is likely a version inaccuracy.
+
+These are minor issues in an otherwise highly accurate, well-structured, and hallucination-free architecture document.
+
+---
+
+**Final Score: 4.5 / 5**
 

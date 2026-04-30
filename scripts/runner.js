@@ -81,6 +81,8 @@ function extractTextFromJsonStream(raw) {
   return text || raw; // fall back to raw if nothing parsed
 }
 
+const AGENT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes per agent call
+
 function execAgent(cmd, promptValue, parseJson) {
   let output = '';
   try {
@@ -88,6 +90,7 @@ function execAgent(cmd, promptValue, parseJson) {
       cwd: FORMBRICKS_DIR,
       env: { ...process.env, BENCHMARK_PROMPT: promptValue },
       stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: AGENT_TIMEOUT_MS,
     });
     const raw = result.toString();
     output = parseJson ? extractTextFromJsonStream(raw) : raw;
@@ -178,25 +181,27 @@ ${assessmentText}
   return { taskId, status: 'success', score, timeMin };
 }
 
-// --- CLI ---
-const args = process.argv.slice(2);
-const taskId = args.find(a => /^T-\d+$/.test(a));
-const agentIdx = args.indexOf('--agent');
-const modelIdx = args.indexOf('--model');
-const isVerbose = args.includes('--verbose');
-const isJson = args.includes('--json');
+// --- CLI (only when executed directly) ---
+if (require.main === module) {
+  const args = process.argv.slice(2);
+  const taskId = args.find(a => /^T-\d+$/.test(a));
+  const agentIdx = args.indexOf('--agent');
+  const modelIdx = args.indexOf('--model');
+  const isVerbose = args.includes('--verbose');
+  const isJson = args.includes('--json');
 
-const agent = agentIdx !== -1 ? args[agentIdx + 1] : DEFAULT_AGENT;
-const model = modelIdx !== -1 ? args[modelIdx + 1] : DEFAULT_MODEL;
+  const agent = agentIdx !== -1 ? args[agentIdx + 1] : DEFAULT_AGENT;
+  const model = modelIdx !== -1 ? args[modelIdx + 1] : DEFAULT_MODEL;
 
-if (!taskId) {
-  console.log('Usage: node runner.js <TASK_ID> [--agent opencode|gemini] [--model <model>] [--verbose] [--json]');
-  console.log(`Defaults: --agent ${DEFAULT_AGENT}  --model ${DEFAULT_MODEL}`);
-  process.exit(1);
+  if (!taskId) {
+    console.log('Usage: node runner.js <TASK_ID> [--agent opencode|gemini] [--model <model>] [--verbose] [--json]');
+    console.log(`Defaults: --agent ${DEFAULT_AGENT}  --model ${DEFAULT_MODEL}`);
+    process.exit(1);
+  }
+
+  runTask(taskId, agent, model, isVerbose, isJson).then(result => {
+    if (result.status === 'failed') process.exit(1);
+  });
 }
-
-runTask(taskId, agent, model, isVerbose, isJson).then(result => {
-  if (result.status === 'failed') process.exit(1);
-});
 
 module.exports = { runTask, DEFAULT_AGENT, DEFAULT_MODEL };

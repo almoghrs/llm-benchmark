@@ -3,90 +3,105 @@
 ## Agent Output
 
 ```text
-I will search for the primary `<Button>` component within the `apps/web` directory.
-I will search for the definition of the `Button` component in the `apps/web` directory.
-I will check if the directory `apps/web/modules/ui/components/button` exists and list its contents.
-I will list the contents of `apps/web/modules/ui/components/button` to find the component file.
-I will read the content of `apps/web/modules/ui/components/button/index.tsx` to confirm the export name.
-I will check `apps/web/tsconfig.json` to confirm the path aliases.
-I will search for all imports of the `Button` component in the `apps/web` directory.
-I will check if there is a main index file in `apps/web/modules/ui/components` that re-exports the `Button` component.
-I will search for re-exports of the `Button` component in the `apps/web` directory.
-I will check `apps/web/modules/ui/components/go-back-button/index.tsx` to see if it uses the `Button` component.
-I will search for all imports of the `Button` component in the `apps/web` directory, increasing the match limit to ensure completeness.
-I will search for any instances where the `Button` component is assigned to a new variable and then exported.
-I will search for any instances where the `Button` component is exported using the `export { Button }` syntax.
-I will read `apps/web/modules/ui/components/alert/index.tsx` to see how `AlertButton` is defined.
-I will search for imports of the `Button` component using relative paths to find more wrappers or re-exports.
-I will search for imports of the `Button` component in the `apps/web/modules/ui` directory using the path alias.
-I will read `apps/web/modules/ui/components/iconbar/index.tsx` to see how it uses the `Button` component.
-I will check if there is an index file in `apps/web/modules/ui` that re-exports the `Button` component.
-I will search for any other `Button` component definitions in the `packages/` directory to see if there is a shared one.
-I will check if the `Button` component from `packages/survey-ui` is imported in the `apps/web` directory.
-I will check the dependencies in `apps/web/package.json`.
-I will run a shell script to count the number of files using the `Button` component, grouped by their feature module.
-I will search for any other re-exports of the `Button` component in the `apps/web` directory.
-I will generate a final list of all files that import the `Button` component, grouped by their respective feature modules.
-The primary `<Button>` component is defined in `apps/web/modules/ui/components/button/index.tsx`. It is the foundational UI component for actions throughout the Formbricks web application (admin dashboard).
+## Button Component Usage Audit
 
-### **Usage Summary**
-The component is imported in **211 files** across the `apps/web` application. The following is a breakdown of its usage grouped by feature module:
-
-#### **1. Survey Module (54 files)**
-This is the most frequent consumer, primarily within the survey editor and management tools.
-*   **Editor:** `cta-element-form.tsx`, `nps-element-form.tsx`, `survey-menu-bar.tsx`, `logic-editor-actions.tsx`, `bulk-edit-options-modal.tsx`, etc.
-*   **Multi-Language:** `manage-translations-modal.tsx`, `add-language-button.tsx`, `language-view.tsx`.
-*   **List & Link:** `survey-list.tsx`, `survey-filters.tsx`, `survey-inactive.tsx`.
-*   **Follow-ups:** `follow-up-modal.tsx`, `follow-ups-view.tsx`.
-
-#### **2. Enterprise Edition (EE) Module (40 files)**
-Used extensively for enterprise-only features.
-*   **Billing:** `pricing-table.tsx`, `select-plan-card.tsx`.
-*   **Contacts & Segments:** `segment-editor.tsx`, `contacts-table.tsx`, `upload-contacts-button.tsx`, `targeting-card.tsx`.
-*   **SSO:** `google-button.tsx`, `github-button.tsx`, `azure-button.tsx`, `saml-button.tsx`.
-*   **Security:** `enter-code.tsx` (2FA), `display-backup-codes.tsx`, `scan-qr-code.tsx`.
-
-#### **3. App Router / Pages (55 files)**
-Used directly in Next.js page components and layout elements.
-*   **Analysis:** `SurveyAnalysisCTA.tsx`, `ResponseTable.tsx`, `FileUploadSummary.tsx`, `OpenTextSummary.tsx`.
-*   **Onboarding:** `ConnectWithFormbricks.tsx`, `OnboardingSetupInstructions.tsx`, `ProjectSettings.tsx`.
-*   **Integrations (Slack, Notion, Airtable):** `AddIntegrationModal.tsx`, `ManageIntegration.tsx`, `MappingRow.tsx`.
-*   **System:** `app/not-found.tsx`, `app/error.tsx`.
-
-#### **4. UI Library & Core Modules (21 files)**
-Used as a building block for other complex UI components.
-*   `data-table`, `date-picker`, `sidebar`, `tags-combobox`, `conditions-editor`, `delete-dialog`.
+### Two Independent Button Implementations
 
 ---
 
-### **Re-exports and Specialized Wrappers**
-There are specific cases where the `Button` is re-exported or wrapped to create specialized action components:
+### 1. Web App Button (primary)
 
-| Component | File Path | Type | Note |
-| :--- | :--- | :--- | :--- |
-| **`AlertButton`** | `apps/web/modules/ui/components/alert/index.tsx` | **Re-export** | A named export that wraps `Button` with context-aware styling for Alerts. |
-| **`GoBackButton`** | `apps/web/modules/ui/components/go-back-button/index.tsx` | **Wrapper** | A specialized button that handles `router.back()` logic. |
-| **`AlertButton`** (Internal) | `apps/web/modules/ui/components/alert-dialog/index.tsx` | Usage | Used within the Alert Dialog primitive. |
-| **`IconBar`** | `apps/web/modules/ui/components/iconbar/index.tsx` | Usage | Uses `Button` (variant: ghost) to render actionable icons. |
+**Canonical source:** `apps/web/modules/ui/components/button/index.tsx`
 
-**Note:** There is another `Button` component located in `packages/survey-ui/src/components/general/button.tsx`. However, this is isolated to the survey rendering engine (end-user facing) and is not imported by the `apps/web` modules listed above.
+Uses `cva` + `@radix-ui/react-slot`, includes a `loading` prop with a `Loader2` spinner. No top-level barrel re-exports it — consumers import directly.
+
+**~211 files import it** via `@/modules/ui/components/button`, plus ~29 sibling `modules/ui` components via relative `"../button"` (same file, different path).
+
+#### Grouped by feature module:
+
+| Module | Count (approx.) | Example files |
+|---|---|---|
+| `modules/survey/editor/` | ~35 | `survey-menu-bar.tsx`, `conditional-logic.tsx`, `bulk-edit-options-modal.tsx` |
+| `modules/survey/` (non-editor) | ~15 | `template.tsx`, `survey-filters.tsx`, `follow-up-item.tsx` |
+| `modules/ui/components/` | ~29 | `alert-dialog/`, `confirmation-modal/`, `data-table/`, `delete-dialog/` |
+| `modules/ee/contacts/` | ~13 | `contacts-table.tsx`, `segment-editor.tsx`, `upload-contacts-button.tsx` |
+| `app/(app)/environments/…/surveys/` | ~12 | `ResponseTable.tsx`, `shareEmbedModal/` tabs |
+| `modules/ee/teams/` | ~8 | `team-settings-modal.tsx`, `create-team-modal.tsx` |
+| `modules/ee/two-factor-auth/` | ~5 | `disable-two-factor-modal.tsx`, `scan-qr-code.tsx` |
+| `modules/organization/` | ~9 | `add-api-key-modal.tsx`, `invite-member/` tabs |
+| `modules/projects/settings/` | ~10 | `delete-project-render.tsx`, `theme-styling.tsx` |
+| `modules/auth/` | ~6 | `login-form.tsx`, `signup-form.tsx`, `forgot-password-form.tsx` |
+| `modules/ee/sso/` | ~5 | `azure-button.tsx`, `github-button.tsx`, `google-button.tsx` |
+| `modules/integrations/webhooks/` | ~4 | `add-webhook-modal.tsx`, `webhook-settings-tab.tsx` |
+| `modules/ee/billing/` | ~2 | `pricing-table.tsx`, `select-plan-card.tsx` |
+| `modules/ee/whitelabel/` | ~2 | `email-customization-settings.tsx`, `favicon-customization-settings.tsx` |
+| `modules/ee/quotas/` | ~3 | `quota-modal.tsx`, `quotas-card.tsx` |
+| `modules/setup/` | ~4 | `create-organization.tsx`, `invite-members.tsx` |
+| `modules/analysis/` | ~3 | `SingleResponseCardHeader.tsx`, `ShareSurveyLink/index.tsx` |
+| `app/(app)/(onboarding)/` | ~5 | `ConnectWithFormbricks.tsx`, `ProjectSettings.tsx` |
+| `app/` root | ~2 | `error.tsx`, `not-found.tsx` |
+
+---
+
+### 2. Survey Widget Button (separate)
+
+**Canonical source:** `packages/survey-ui/src/components/general/button.tsx`
+
+Adds a `"custom"` variant/size; no `loading` prop. Used only within the survey rendering package.
+
+**Re-exported** (no rename) via `packages/survey-ui/src/index.ts`:
+```ts
+export { Button, buttonVariants } from "@/components/general/button";
+```
+
+Consumers inside the package: `cta.tsx`, `single-select.tsx`, `multi-select.tsx`, `calendar.tsx`, plus two story files.
+
+---
+
+### Re-exports / Aliases to Flag
+
+| File | What it does | Flag |
+|---|---|---|
+| `packages/survey-ui/src/index.ts:3` | Re-exports survey-ui `Button` as part of package public API | No rename — clean |
+| `packages/email/src/index.ts:36` | `export { Button } from "@react-email/components"` | **Unrelated** — this is React Email's `Button`, not a Formbricks component |
+| `modules/email/components/preview-email-template.tsx:8` | `import { Button as EmailButton } from "@formbricks/email"` | **Alias** — renames React Email's Button to `EmailButton` to avoid collision |
+
+**No file** does `export { Button as SomethingElse }` for either Formbricks Button. No `export *` barrel wraps the web app Button. The only alias in the codebase is the `EmailButton` rename, and that's for a completely unrelated React Email component.
 
 ```
 
 ## Evaluation
 
-The agent's performance is excellent, demonstrating a thorough and methodical investigation of the codebase. It successfully fulfilled almost all requirements of the rubric with high precision.
+## Evaluation
 
-### **Assessment against Rubric:**
+### Rubric Criterion Assessment
 
-*   **Correctly identifies the primary Button location:** **Pass.** The agent correctly identified `apps/web/modules/ui/components/button/index.tsx` as the primary location.
-*   **Identifies over 200 imports (specifically 211):** **Pass.** The agent provided the exact number (211), which matches the specific count mentioned in the rubric.
-*   **Groups usages into feature modules:** **Pass.** The agent provided a detailed breakdown including "Survey Module", "Enterprise Edition (EE)", "App Router / Pages", and "UI Library", which aligns perfectly with the requested categories (survey, organization, ee, etc.).
-*   **Correctly identifies that it is NOT re-exported under a different name (aliased):** **Partial Pass / Fail.** This is the only point of slight deviation. The rubric states the agent should identify that it is *NOT* re-exported/aliased. The agent's output includes a table claiming `AlertButton` is a "Re-export". However, in the "Note" column, it clarifies that it "wraps Button," which describes a wrapper component rather than a symbol alias (`export { Button as AlertButton }`). While the agent correctly understood the structural relationship, its terminology ("Re-export") technically contradicts the rubric's "NOT re-exported" fact.
-*   **Differentiates between the dashboard button and survey widget button:** **Pass.** The agent explicitly noted the existence of the separate `Button` component in `packages/survey-ui/src/components/general/button.tsx` and correctly stated it is isolated from the `apps/web` modules.
+**1. Correctly identifies the primary Button location**
+`apps/web/modules/ui/components/button/index.tsx` — explicitly stated as "Canonical source." **Pass.**
 
-### **Conclusion:**
-The agent's output is highly detailed and accurate regarding counts and locations. The precision regarding the count of 211 imports is particularly impressive. The slight confusion in labeling a wrapper as a "Re-export" is a minor technicality in terminology, though it does conflict with the specific rubric instruction regarding the absence of aliases.
+**2. Identifies over 200 imports (specifically ~211)**
+States "~211 files import it" directly. **Pass.**
 
-**Final Quality Score: 4.5/5**
+**3. Groups usages into feature modules**
+Provides a detailed table with ~19 rows covering `survey`, `organization`, `ee`, `auth`, `projects`, and more — with approximate counts and example files. **Pass.**
+
+**4. Correctly identifies it is NOT re-exported under a different name (aliased) in `apps/web`**
+Explicitly states: "No file does `export { Button as SomethingElse }` for either Formbricks Button. No `export *` barrel wraps the web app Button." Also correctly distinguishes the `EmailButton` alias as unrelated. **Pass.**
+
+**5. Differentiates between the dashboard button and the survey widget button**
+Clearly separates the two implementations, noting different feature sets (`loading` prop vs `"custom"` variant/size), different canonical paths, and different consumer scopes. **Pass.**
+
+### Additional Quality Observations
+
+- The output goes beyond the rubric by identifying the React Email `Button` as a third unrelated component and explaining the aliasing context — this is accurate and useful signal.
+- The relative import count ("~29 sibling `modules/ui` components via relative `../button`") is a detail not required by the rubric but adds precision.
+- Approximate counts are clearly labeled as approximate, which is honest.
+- The table format is clean and organized.
+- No factual errors are detectable against the rubric criteria.
+
+### Score
+
+**5 / 5**
+
+All five rubric criteria are met accurately and completely, with additional well-reasoned context that improves the output's utility without introducing errors.
 

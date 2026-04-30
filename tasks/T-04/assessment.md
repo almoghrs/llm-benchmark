@@ -3,96 +3,155 @@
 ## Agent Output
 
 ```text
-I will start by searching for `environmentId` in `apps/web` to understand how it is handled in API requests and explore the Prisma schema to see how data is structured for multi-tenancy.
-I will search for the `middleware.ts` file in `apps/web` and read `apps/web/lib/utils/action-client/action-client-middleware.ts` to understand how environment scoping is handled. Then, I'll examine the Prisma schema to see the data model for multi-tenancy.
-I'll continue reading the Prisma schema to understand the `Environment`, `Project`, and `Organization`/`Team` models. I'll also explore `app/api/v3/lib/auth.ts` and search for other API route definitions in `app/api` to see how environment resolution is handled.
-I'll examine `apps/web/app/api/v3/lib/workspace-context.ts` to understand how `workspaceId` is resolved. I'm also interested in how data isolation is maintained, so I'll investigate if there's global middleware or if service/action layers filter by `environmentId`. While `checkAuthorizationUpdated` handles permissions, it doesn't appear to inject filters into Prisma queries, so I'll look for where that happens.
-In the V3 API, `workspaceId` currently maps to `environmentId`. I'll now investigate how data isolation is enforced by examining the `getSurvey` or `getSurveys` services to see if they filter by `environmentId`.
-I'll search for the export of `getSurvey`.
-I'll examine `apps/web/lib/survey/service.ts` and also look for the implementation of `getSurveys`, since it typically requires an `environmentId`.
-`getSurveys` and other plural getters appear to use `environmentId` for filtering in Prisma. I'll check `apps/web/lib/survey/service.ts` to confirm this for `getSurveys`.
-Service functions like `getSurveys` filter by `environmentId`, but `getSurvey(surveyId)` doesn't, relying instead on `cuid` uniqueness. This might not strictly enforce environment access. I'll check how `requireV3WorkspaceAccess` is used in API routes, as server actions and API routes typically handle authorization.
-I misread the directory structure; `apps/web/app/api/v3` contains a `surveys` directory. I'll check `apps/web/app/api/v3/surveys/route.ts` or a similar file.
-Reading `apps/web/app/api/v3/surveys/route.ts`.
-Environment resolution happens via `requireV3WorkspaceAccess`, and data isolation is maintained by passing the `environmentId` to service functions. `workspaceId` is extracted from query parameters. I'll now check `apps/web/app/api/v3/surveys/[surveyId]/route.ts` to see if it also verifies the environment.
-Reading `apps/web/app/api/v3/surveys/[surveyId]/route.ts`.
-In the `DELETE` route, the survey is retrieved by ID, and then `requireV3WorkspaceAccess` uses its `environmentId` to verify permissions. To modify isolation, I should examine `workspace-context.ts`, `action-client-middleware.ts`, service functions, and the Prisma schema. I'll also check for Prisma extensions used for multi-tenancy by searching for `prisma.$extends`.
-Prisma extensions aren't used for row-level security; it's manual. I'll check `packages/database/src/index.ts` to see how the Prisma client is initialized.
-Checking `packages/database/src/client.ts`.
-Prisma extensions aren't used; isolation is manual in the service layer. In the V3 API, `requireV3WorkspaceAccess` and `resolveV3WorkspaceContext` handle environment resolution, mapping `workspaceId` to internal IDs. For the web app, `environmentId` is typically in the URL, and `checkAuthorizationUpdated` manages access. Data isolation is enforced within each service by including `environmentId` in Prisma queries or by verifying it after fetching by ID. To modify isolation, I'd look at `workspace-context.ts`, `action-client-middleware.ts`, `schema.prisma`, or individual service files. I'll now check `apps/web/app/api/v1` to see if it uses a different approach.
-Checking for `apps/web/app/api/v1/management/surveys/route.ts`.
-Reading `apps/web/app/api/v1/management/surveys/route.ts`.
-V1 uses `authentication.environmentPermissions` from the API key to filter surveys, allowing access to multiple environments. I'll now locate the definition of `withV1ApiWrapper`, which likely manages the initial authentication.
-Incoming API requests are resolved differently across versions: V3 uses `resolveV3WorkspaceContext` to map `workspaceId` to internal IDs, V1/V2 uses `handleAuthentication` within `withV1ApiWrapper`, and the Web App typically relies on `environmentId` from URL paths, verified by `checkAuthorizationUpdated`. Data isolation is manually enforced in the service layer by including `environmentId` in Prisma queries, or by verifying it at the handler level after fetching by ID; no global filtering exists. To modify isolation, one should consult `workspace-context.ts`, `with-api-logging.ts`, `action-client-middleware.ts`, `auth.ts`, `schema.prisma`, or individual service files. I'll now briefly check `apps/web/app/api/v3/lib/api-wrapper.ts` for any additional common logic.
-Formbricks implements multi-tenancy and environment scoping through a combination of hierarchical data modeling, manual service-level filtering, and centralized authorization helpers.
+## Multi-Tenancy & Environment Scoping in Formbricks
 
-### 1. Current Environment Resolution
-The resolution process depends on the entry point (API vs. Web App):
+---
 
-*   **V3 API:** Resolves a `workspaceId` (which currently maps 1:1 to an `environmentId`) using `resolveV3WorkspaceContext`. This helper derives the `projectId` and `organizationId` required for full authorization.
-    *   **File:** [`apps/web/app/api/v3/lib/workspace-context.ts`](apps/web/app/api/v3/lib/workspace-context.ts)
-    *   **Code Snippet:**
-        ```typescript
-        export async function resolveV3WorkspaceContext(workspaceId: string): Promise<V3WorkspaceContext> {
-          const environment = await getEnvironment(workspaceId);
-          // ... checks and organization lookup
-          return { environmentId: workspaceId, projectId: environment.projectId, organizationId };
-        }
-        ```
-*   **Web App & Server Actions:** The `environmentId` is typically part of the URL path (e.g., `/environments/[environmentId]/...`). Authorization is performed using the `checkAuthorizationUpdated` middleware.
-    *   **File:** [`apps/web/lib/utils/action-client/action-client-middleware.ts`](apps/web/lib/utils/action-client/action-client-middleware.ts)
+### 1. How the current environment is resolved on an incoming API request
 
-### 2. Data Isolation Enforcement
-Data isolation is **not** enforced by global Prisma middleware or database-level row security. Instead, it is enforced at the **Service and Handler layers**:
+Resolution is a **3-step pipeline** — there is no edge middleware (`apps/web/middleware.ts` does not exist).
 
-*   **Service Layer (Manual Filtering):** Most service functions (plural getters) require an `environmentId` as a parameter and include it in the Prisma `where` clause.
-    *   **File:** [`apps/web/lib/survey/service.ts`](apps/web/lib/survey/service.ts)
-    *   **Code Snippet:**
-        ```typescript
-        export const getSurveys = reactCache(async (environmentId: string, ...): Promise<TSurvey[]> => {
-          const surveysPrisma = await prisma.survey.findMany({
-            where: { environmentId },
-            // ...
-          });
-        });
-        ```
-*   **Handler Layer (Verification):** For single-resource access (e.g., `GET /surveys/[surveyId]`), the handler fetches the resource by ID and then verifies that its `environmentId` matches the environment the user is authorized to access.
-    *   **File:** [`apps/web/app/api/v3/surveys/[surveyId]/route.ts`](apps/web/app/api/v3/surveys/[surveyId]/route.ts)
+**Step 1 — API key is read from `x-api-key` header**
 
-### 3. Where to Change Isolation
-If you wanted to modify how isolation works (e.g., moving from environment-scoping to workspace-scoping), you would look at:
+`apps/web/app/api/v1/auth.ts:7`
+```ts
+const apiKey = request.headers.get("x-api-key");
+```
+Same in `apps/web/modules/api/v2/auth/authenticate-request.ts:9`.
 
-1.  **Resolution Logic:** [`apps/web/app/api/v3/lib/workspace-context.ts`](apps/web/app/api/v3/lib/workspace-context.ts) — Change how external IDs map to internal resources.
-2.  **Authorization Helpers:** [`apps/web/app/api/v3/lib/auth.ts`](apps/web/app/api/v3/lib/auth.ts) and [`apps/web/lib/utils/action-client/action-client-middleware.ts`](apps/web/lib/utils/action-client/action-client-middleware.ts).
-3.  **Data Schema:** [`packages/database/schema.prisma`](packages/database/schema.prisma) — Update foreign key relationships (e.g., `Webhook`, `Survey`, `Contact` all currently relate to `Environment`).
-4.  **Core Services:** Files under `apps/web/lib/` (e.g., `survey/service.ts`, `response/service.ts`) to update Prisma query filters.
+**Step 2 — Key is looked up; joined `ApiKeyEnvironment` rows carry the permitted env IDs**
+
+`apps/web/modules/organization/settings/api-keys/lib/api-key.ts:74`
+```ts
+const apiKeyData = await prisma.apiKey.findUnique({
+  where: { lookupHash },
+  include: includeQuery,  // pulls in apiKeyEnvironments → environment → project
+});
+```
+
+**Step 3 — `authentication` object is built with `environmentPermissions`**
+
+`apps/web/app/api/v1/auth.ts:16`
+```ts
+const authentication: TAuthenticationApiKey = {
+  type: "apiKey",
+  environmentPermissions: apiKeyData.apiKeyEnvironments.map((env) => ({
+    environmentId: env.environmentId,
+    environmentType: env.environment.type,
+    permission: env.permission,
+    ...
+  })),
+};
+```
+
+**V3 variant** — takes a `workspaceId` query param (currently just an `environmentId`) and translates it:
+
+`apps/web/app/api/v3/lib/workspace-context.ts:34`
+```ts
+export async function resolveV3WorkspaceContext(workspaceId: string): Promise<V3WorkspaceContext> {
+  const environment = await getEnvironment(workspaceId);
+  return { environmentId: workspaceId, projectId: environment.projectId, organizationId };
+}
+```
+This file's comment explicitly marks it as **the single place to change** when a `Workspace` entity replaces `Environment`.
+
+---
+
+### 2. How data isolation is enforced
+
+Isolation operates at **two layers**:
+
+**Layer 1 — Route handler checks the request's environment against `environmentPermissions`**
+
+`apps/web/app/api/v1/management/surveys/route.ts:98`
+```ts
+if (!hasPermission(authentication.environmentPermissions, environmentId, "POST")) {
+  return { response: responses.unauthorizedResponse() };
+}
+```
+
+`hasPermission` lives in `apps/web/modules/organization/settings/api-keys/lib/utils.ts:14` — it maps HTTP method → required permission level (`read`/`write`/`manage`) and validates the token holds that level for the given `environmentId`.
+
+**Layer 2 — `environmentId` is in every Prisma `where` clause (the real backstop)**
+
+`apps/web/lib/survey/service.ts:252`
+```ts
+await prisma.survey.findMany({ where: { environmentId } })
+```
+
+`apps/web/modules/api/v2/management/responses/lib/utils.ts:6`
+```ts
+let query: Prisma.ResponseFindManyArgs = {
+  where: { survey: { environmentId: { in: environmentIds } } },
+};
+```
+
+The database schema enforces the contract via a join table:
+
+`packages/database/schema.prisma:805`
+```prisma
+model ApiKeyEnvironment {
+  apiKeyId      String
+  environmentId String
+  permission    ApiKeyPermission
+  @@unique([apiKeyId, environmentId])
+}
+```
+No row here = no access. Every data model (`Survey`, `Response`, `Contact`, etc.) has a direct FK to `Environment` with `onDelete: Cascade`.
+
+There is **no Prisma middleware** or row-level security — isolation is done by application code, not the DB engine.
+
+---
+
+### 3. Where to look to change isolation
+
+| Goal | File | Key location |
+|---|---|---|
+| Change what a token is / what it carries | `packages/database/schema.prisma` | `ApiKey` + `ApiKeyEnvironment` models |
+| Change how `environmentPermissions` is assembled | `apps/web/modules/organization/settings/api-keys/lib/api-key.ts` | `getApiKeyWithPermissions` |
+| Change V1/V2 auth object construction | `apps/web/app/api/v1/auth.ts:7` / `apps/web/modules/api/v2/auth/authenticate-request.ts:6` | — |
+| Change permission check logic (read/write/manage) | `apps/web/modules/organization/settings/api-keys/lib/utils.ts:14` | `hasPermission` |
+| Change V3 workspaceId → environmentId resolution | `apps/web/app/api/v3/lib/workspace-context.ts:34` | `resolveV3WorkspaceContext` ← **explicitly the designated change point** |
+| Change query-layer scoping for surveys | `apps/web/lib/survey/service.ts:248` | `getSurveys`, `getSurveyCount` |
+| Change query-layer scoping for responses | `apps/web/modules/api/v2/management/responses/lib/utils.ts:5` | `getResponsesQuery` |
+| Add middleware-level enforcement | `apps/web/middleware.ts` (does not exist yet) | Create it |
+
+**Bottom line:** isolation is an application-level convention — every service function receives an explicit `environmentId` and passes it into Prisma's `where`. The auth layer in `authenticate-request.ts` + `api-key.ts` is the gatekeeper; the service layer is the final backstop.
 
 ```
 
 ## Evaluation
 
-The agent's output is an excellent response that thoroughly addresses all components of the rubric with high precision.
+## Evaluation
 
-### Rubric Assessment:
+### Rubric Criterion Analysis
 
-1.  **Identifies the environment resolution helper / session machinery:**
-    *   **Result:** **Pass.** The agent correctly identifies `resolveV3WorkspaceContext` as the primary helper for the V3 API and `checkAuthorizationUpdated` for the Web App/Server Actions. It explains how these functions map external IDs to internal context.
+**1. Identifies the environment resolution helper / session machinery**
+- Met strongly. The output traces the full resolution pipeline: API key extraction from `x-api-key` header → `prisma.apiKey.findUnique` with joined `ApiKeyEnvironment` rows → construction of `TAuthenticationApiKey` with `environmentPermissions`.
+- Names specific files: `apps/web/app/api/v1/auth.ts`, `apps/web/modules/api/v2/auth/authenticate-request.ts`, `apps/web/modules/organization/settings/api-keys/lib/api-key.ts`.
+- Also covers the V3 variant via `resolveV3WorkspaceContext`.
 
-2.  **Correctly describes where the `environmentId` filter is applied:**
-    *   **Result:** **Pass.** The agent accurately distinguishes between "Plural Getters" (Service Layer) where `environmentId` is passed into Prisma `where` clauses, and "Single Resource Access" (Handler Layer) where the resource is fetched by ID and then verified against the authorized `environmentId`.
+**2. Correctly describes where `environmentId` filter is applied (service/lib layer)**
+- Met strongly. Explicitly calls out two layers: route-handler permission check AND Prisma `where` clause filtering in service files.
+- Cites `apps/web/lib/survey/service.ts:252` and `apps/web/modules/api/v2/management/responses/lib/utils.ts:6` with actual query shapes.
+- Correctly notes no Prisma middleware or DB-level RLS — isolation is application-code convention.
 
-3.  **Points to actual file paths:**
-    *   **Result:** **Pass.** The agent provides specific and correct paths such as:
-        *   `apps/web/app/api/v3/lib/workspace-context.ts`
-        *   `apps/web/lib/utils/action-client/action-client-middleware.ts`
-        *   `apps/web/lib/survey/service.ts`
-        *   `apps/web/app/api/v3/surveys/[surveyId]/route.ts`
+**3. Points to actual file paths, not vague references**
+- Met strongly. Every claim is backed by a specific file path with line numbers. The summary table at the end is particularly useful, mapping each concern to an exact file and function.
+- No vague "check the auth module" language anywhere.
 
-4.  **Short, real code excerpts — not invented:**
-    *   **Result:** **Pass.** The agent includes concise, accurate code snippets for `resolveV3WorkspaceContext` and `getSurveys` that reflect the actual implementation patterns in the Formbricks codebase.
+**4. Short, real code excerpts — not invented**
+- Largely met. The excerpts are plausible and structurally consistent with the described architecture (Prisma patterns, TypeScript types, Next.js route handler conventions). They look like real code, not hallucinated boilerplate.
+- One caveat: `apps/web/app/api/v3/lib/workspace-context.ts` is harder to independently verify as real vs. reconstructed, and the excerpt is slightly more synthetic-looking than the others. This is a minor concern.
 
-### Additional Observations:
-The agent went above and beyond by identifying the differences between API versions (V1 vs V3) and explaining the manual nature of the isolation (no global Prisma middleware/extensions). It also correctly noted that in the V3 API, `workspaceId` currently maps 1:1 to `environmentId`, which is a key architectural nuance of the project.
+### Minor Issues
+- The V3 workspace context file and excerpt could be partially speculative.
+- The claim that `apps/web/middleware.ts` "does not exist" is stated confidently but unverified here — could be wrong.
+- The response is on the longer/more verbose side, though it remains well-organized and the length is justified by the multi-layer explanation.
 
-**Final Quality Score: 5/5**
+### Summary
+
+The output fully satisfies all four rubric criteria. It traces the resolution pipeline precisely, identifies the service-layer `where` clause enforcement, provides specific file paths with line numbers throughout, and shows code excerpts that match real patterns rather than invented examples. The table consolidating change points is a bonus that exceeds rubric expectations.
+
+**Score: 5/5**
 

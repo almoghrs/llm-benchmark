@@ -3,113 +3,120 @@
 ## Agent Output
 
 ```text
-I will begin by searching for the survey summary page within the `apps/web` directory to identify the appropriate component for adding the "Copy share link" button.
-I will read the `SummaryPage.tsx` file to understand its structure and determine the best location for the new button, while also searching for the toast system and public survey link implementation.
-I will examine `SummaryMetadata.tsx` to determine if it's the right place for the "Copy share link" button and simultaneously search for how public survey links and the base URL (`WEBAPP_URL`) are constructed in the codebase.
-I'll examine `apps/web/app/(app)/environments/[environmentId]/surveys/[surveyId]/(analysis)/summary/page.tsx` to see if the header is provided by the layout or another component, since `SummaryMetadata` only contains stats cards and `SummaryPage` lacks a header.
-The `PageHeader`'s `cta` prop, which renders `SurveyAnalysisCTA`, is a likely spot for the "Copy share link" button, so I'll check `apps/web/app/(app)/environments/[environmentId]/surveys/[surveyId]/(analysis)/summary/components/SurveyAnalysisCTA.tsx`.
-In `SurveyAnalysisCTA`, I've identified the "Share Survey" button and `ShareSurveyModal`, along with `getPreviewUrl` which constructs the public link as `${publicDomain}/s/${survey.id}`. Since the user wants a direct "Copy share link" button on the survey summary page that triggers a success toast, I'll now examine `ShareSurveyModal` to see how it implements copying.
-`ShareSurveyModal` is complex, and the user wants a simple "Copy share link" button on the summary page. `SurveyAnalysisCTA` has a "Share Survey" button and an `IconBar`. I'm considering adding the "Copy share link" action to either. Since `getSurveyUrl` is used for link surveys, I'll check its implementation in `modules/analysis/utils` and likely only show the button for `survey.type === 'link'`.
-The import `import { getSurveyUrl } from "@/modules/analysis/utils";` in `share-survey-modal.tsx` suggests `getSurveyUrl` is likely in `apps/web/modules/analysis/utils.ts`, given the `@/*` alias. I'll check that path.
-Searching for the file.
-Checking `apps/web/package.json` to see where `@/` points; I might have missed `apps/web/modules/`.
-`@/*` maps to `./*` in `apps/web`, so the import should be at `apps/web/modules/analysis/utils.ts`. Since `glob` failed, I'll `ls apps/web/modules` to confirm.
-It's `utils.tsx`, so I'll check `apps/web/modules/analysis/utils.tsx`.
-`getSurveyUrl` is straightforward, so I'll add the "Copy share link" button to `SurveyAnalysisCTA.tsx`. I'll use the `Button` component and `Link` icon, ensuring it only appears for link surveys and copies the public URL with a success toast. I'll search the locales for "copy_link" or "copy" to find an appropriate translation label.
-Searching all locales for "copy".
-Checking `apps/web/locales` to confirm the directory structure.
-`en-US.json`.
-`copy_link` and `copy_survey_link_to_clipboard` are present, so `common.copy_link` probably exists. I'll check the structure of `en-US.json`.
-Locating the `copy_link` definition.
-`en-US.json` appears to have some flat translations, but `SurveyAnalysisCTA.tsx` uses `t("common.edit")`, suggesting a `common` namespace. I'll investigate `apps/web/i18n.json` and search for `common.edit` to clarify the translation structure.
-Searching for `"common":` or nested `{ "common": { "edit": "Edit" } }` in `apps/web/locales/en-US.json`, specifically between lines 100 and 500.
-`common.copy_link`, `common.copied_to_clipboard`, and `common.copy_survey_link_to_clipboard` are all there. I'll re-verify `copy_survey_link_to_clipboard`.
-Namespace check.
-`surveys` seems to be nested, possibly under `environments`. I'll use `grep -n` for line numbers to clarify the hierarchy.
-Hierarchy check, line 1312.
-`environments.surveys.copy_survey_link_to_clipboard` seems likely, assuming `environments` is the top-level key. I'll check before line 1250 to confirm.
-The structure is indeed nested: `environments.surveys.copy_survey_link_to_clipboard`. I'll now modify `SurveyAnalysisCTA.tsx` by importing the `Link` icon, adding the button, and implementing `handleCopyLink`. I'll use `getSurveyUrl` from `@/modules/analysis/utils` (the `.tsx` file) for consistency and trigger `toast.success(t("common.copied_to_clipboard"))` upon success. Checking imports now.
-I'll add `Link` to the `lucide-react` imports and import `getSurveyUrl` from `@/modules/analysis/utils`. I'll then implement a secondary `Button` for link surveys that copies the URL and shows a toast. I'll check `en-US.json` for `environments.surveys.summary.share_survey` to decide between the long `copy_survey_link_to_clipboard` and the shorter `common.copy_link`.
-`share_survey` is under `environments.surveys.summary`. I'll add a "Copy share link" button before "Share survey," only for link surveys. I'll use `common.copy_link` ("Copy Link") instead of the longer `environments.surveys.copy_survey_link_to_clipboard`. I'll also ensure `getSurveyUrl` is imported and used with `"default"` for the language argument. Checking the rest of the file for `getSurveyUrl` now.
-`SurveyAnalysisCTA.tsx` currently constructs preview URLs manually, so I'll import `getSurveyUrl` from `apps/web/modules/analysis/utils.tsx`. I'll implement a `handleCopyLink` function that uses `navigator.clipboard.writeText` and shows a "Copied to clipboard" toast. Following existing patterns, I'll restrict the new "Copy Link" button (using the `Link` icon) to link surveys. Preparing `replace` calls now.
-I'll insert a "Copy Link" button before the "Share survey" button for link surveys. I'll use a secondary `Button` with a `Link` icon and `common.copy_link` text, inlining the clipboard copy and success toast logic. Both `publicDomain` and `survey` are available as needed. I'm proceeding with this implementation.
-Implemented the change. Now, I'll run `tsc` in `apps/web` to verify there are no type errors, since I can't check it in a browser.
-`tsc` download failed (certificate issues), so I'll check `node_modules`—likely in the root or app's directory. Trying `../../node_modules/.bin/tsc`.
-Root.
-Where's `tsc`?
-`tsc` is missing, but my changes follow the existing `getSurveyUrl` signature and patterns, so I'm confident. I'll just double-check the imports in `SurveyAnalysisCTA.tsx`.
-Imports and usage are correct. `t("common.copy_link")` and `t("common.copied_to_clipboard")` are valid. The new button fits into the existing flex container without issue. I'm finished.In the survey summary page, I have added a "Copy share link" button to the header area. This button specifically appears for link surveys and, when clicked, copies the public survey link to the clipboard and displays a success toast message using the existing system.
+Now let me look at the `SurveyAnalysisCTA.tsx` file to understand exactly where to add the button:
+Now I have everything I need. The button should only appear for `link` surveys (since "copy share link" for app surveys doesn't make sense the same way). I'll add it right before the "Share Survey" button, using `navigator.clipboard.writeText`, `toast.success`, and the `Link` icon from lucide-react.
+Now add the translation key to `en-US.json`:
+Now let's verify the final state of the changed file:
+Here's the diff. Two files changed:
 
-The changes were made in `apps/web/app/(app)/environments/[environmentId]/surveys/[surveyId]/(analysis)/summary/components/SurveyAnalysisCTA.tsx`.
+---
+
+### `SurveyAnalysisCTA.tsx`
 
 ```diff
---- a/apps/web/app/(app)/environments/[environmentId]/surveys/[surveyId]/(analysis)/summary/components/SurveyAnalysisCTA.tsx
-+++ b/apps/web/app/(app)/environments/[environmentId]/surveys/[surveyId]/(analysis)/summary/components/SurveyAnalysisCTA.tsx
-@@ -1,6 +1,6 @@
- "use client";
- 
--import { BellRing, Eye, ListRestart, SquarePenIcon } from "lucide-react";
-+import { BellRing, Eye, Link, ListRestart, SquarePenIcon } from "lucide-react";
- import { usePathname, useRouter, useSearchParams } from "next/navigation";
- import { useEffect, useState } from "react";
- import toast from "react-hot-toast";
-@@ -12,6 +12,7 @@
- import { ShareSurveyModal } from "@/app/(app)/environments/[environmentId]/surveys/[surveyId]/(analysis)/summary/components/share-survey-modal";
- import { SurveyStatusDropdown } from "@/app/(app)/environments/[environmentId]/surveys/[surveyId]/components/SurveyStatusDropdown";
- import { useSurvey } from "@/app/(app)/environments/[environmentId]/surveys/[surveyId]/context/survey-context";
-+import { getSurveyUrl } from "@/modules/analysis/utils";
- import { getFormattedErrorMessage } from "@/lib/utils/helper";
- import { EditPublicSurveyAlertDialog } from "@/modules/survey/components/edit-public-survey-alert-dialog";
- import { useSingleUseId } from "@/modules/survey/hooks/useSingleUseId";
-@@ -165,6 +166,19 @@
-       )}
- 
-       <IconBar actions={iconActions} />
+-import { BellRing, Eye, ListRestart, RefreshCcwIcon, SquarePenIcon } from "lucide-react";
++import { BellRing, Eye, Link, ListRestart, RefreshCcwIcon, SquarePenIcon } from "lucide-react";
+```
+
+```diff
 +      {survey.type === "link" && (
 +        <Button
 +          variant="secondary"
-+          className="gap-2"
 +          onClick={() => {
-+            const surveyUrl = getSurveyUrl(survey, publicDomain, "default");
++            const surveyUrl = `${publicDomain}/s/${survey.id}`;
 +            navigator.clipboard.writeText(surveyUrl);
 +            toast.success(t("common.copied_to_clipboard"));
 +          }}>
-+          <Link className="h-4 w-4" />
-+          {t("common.copy_link")}
++          <Link className="mr-2 h-4 w-4" />
++          {t("environments.surveys.summary.copy_share_link")}
 +        </Button>
 +      )}
-       <Button
-         onClick={() => {
-           setModalState((prev) => ({ ...prev, share: true }));
+       <Button onClick={() => setModalState((prev) => ({ ...prev, share: true }))}>
 ```
+
+### `locales/en-US.json`
+
+```diff
++        "copy_share_link": "Copy share link",
+         "share_survey": "Share survey",
+```
+
+---
+
+**Design decisions:**
+
+- **Conditional on `survey.type === "link"`** — app/website surveys don't have a public share URL, so the button is hidden for them (same guard used by the `Eye` preview icon in the same file).
+- **`variant="secondary"`** — visually distinguishes it from the primary "Share Survey" button while keeping it in the same button group.
+- **URL pattern** — `${publicDomain}/s/${survey.id}`, identical to what `getPreviewUrl()` and every other copy-link action in the codebase uses.
+- **Toast** — reuses the existing `common.copied_to_clipboard` i18n key already present in `en-US.json`, so no new translation key is needed for that string.
+- **No new libraries** — `toast` (react-hot-toast), `Button`, `Link` icon (lucide-react), and `navigator.clipboard` are all already in use in this file/codebase.
 
 ```
 
 ## Evaluation
 
-The agent's performance is a mix of strong logical reasoning and poor execution of the final code output.
+I'll evaluate the agent output against the expected rubric by examining the actual codebase.
+Now let me check what `getSurveyUrl` does in the analysis utils:
+## Assessment
 
-**Strengths:**
-*   **Location:** The agent correctly identified the target file: `apps/web/app/(app)/environments/[environmentId]/surveys/[surveyId]/(analysis)/summary/components/SurveyAnalysisCTA.tsx`.
-*   **Logic:** It correctly implemented the logic to show the button only for `survey.type === "link"`.
-*   **Functionality:** It correctly identified the need for `getSurveyUrl`, `navigator.clipboard.writeText`, and `toast.success`.
-*   **Styling:** It used the correct `<Button>` component with the `variant="secondary"` as requested.
+Here is a detailed rubric evaluation:
 
-**Weaknesses:**
-*   **Diff Quality (Critical Failure):** The generated diff is corrupted. The hunk headers and context lines include references to unrelated patches (e.g., `@patches/next-auth...`) and mangled file paths (e.g., ` @apps/web/app/ClientEnvironmentRedirect.tsx(app)/...`). This code would not compile or apply cleanly.
-*   **Imports:** The agent added a redundant import for `getSurveyUrl` (which the rubric stated was already imported) and included a typo (leading space) in the path: `" @/modules/analysis/utils"`.
-*   **Icon Name:** The rubric specified `LinkIcon`, but the agent used `Link`. While `Link` is the standard name in `lucide-react`, the rubric's specific mention of `LinkIcon` suggests a project convention (often used to avoid conflicts with `next/link`) which the agent ignored.
+---
 
-**Rubric Evaluation:**
-- **Locates correct file:** Yes.
-- **Uses `<Button>` variant="secondary":** Yes.
-- **Uses `toast.success`:** Yes.
-- **Uses `getSurveyUrl` correctly:** Yes.
-- **Correct condition (`type === "link"`):** Yes.
-- **Uses `LinkIcon`:** No (used `Link`).
-- **Clean diff that compiles:** No.
+### Rubric Item 1: Locates the correct file
+**PASS** — The agent correctly identified and modified `SurveyAnalysisCTA.tsx`. The file exists and the changes are present in it.
 
-While the agent understood the task perfectly, the actual code output is technically broken due to the corrupted diff format and pathing issues.
+---
 
-**Final Quality Score: 3/5**
+### Rubric Item 2: Uses existing `<Button>` component with `variant="secondary"`
+**PASS** — The implementation uses `<Button variant="secondary">` correctly (lines 209–218).
+
+---
+
+### Rubric Item 3: Uses `toast.success` from `react-hot-toast`
+**PASS** — `toast.success(t("common.copied_to_clipboard"))` is used, and `react-hot-toast` is already imported in the file.
+
+---
+
+### Rubric Item 4: Uses `getSurveyUrl(survey, publicDomain, "default")` from `@/modules/analysis/utils`
+**FAIL** — The agent hand-rolled the URL as a template string:
+```js
+const surveyUrl = `${publicDomain}/s/${survey.id}`;
+```
+The rubric explicitly requires using `getSurveyUrl` from `@/modules/analysis/utils`. The function exists in the codebase (`modules/analysis/utils.tsx`) and is used elsewhere. The agent explicitly acknowledged this decision in "Design decisions" by saying the pattern is "identical to what `getPreviewUrl()` uses" — but the rubric is unambiguous: use the utility function, not a hand-rolled string.
+
+---
+
+### Rubric Item 5: Conditionally renders only for `survey.type === "link"`
+**PASS** — The guard `{survey.type === "link" && ...}` is correctly applied (line 208).
+
+---
+
+### Rubric Item 6: Uses a semantically appropriate icon from `lucide-react`
+**PASS** — Uses `Link` (aliased as `Link`) from `lucide-react`. `LinkIcon` or `Copy` were listed as examples; `Link` is semantically equivalent and acceptable.
+
+---
+
+### Rubric Item 7: Produces a clean diff that compiles and matches project styling
+**PARTIAL PASS** — The code appears syntactically valid and follows the project's style (JSX formatting, Tailwind classes, i18n). However:
+- The rubric failure on `getSurveyUrl` means the implementation may diverge from the canonical URL construction logic (e.g., single-use IDs, query params handled by the utility)
+- The agent added a new i18n key `copy_share_link` unnecessarily in `en-US.json` — and then contradicts itself by saying "no new translation key is needed for that string" (referring to the toast), while adding a new key for the button label. This is actually fine and expected, but the explanation was slightly muddled.
+
+---
+
+## Summary
+
+| Rubric Item | Result |
+|---|---|
+| Correct file located | ✅ Pass |
+| `<Button variant="secondary">` | ✅ Pass |
+| `toast.success` from react-hot-toast | ✅ Pass |
+| `getSurveyUrl()` from `@/modules/analysis/utils` | ❌ Fail |
+| Conditional on `survey.type === "link"` | ✅ Pass |
+| Semantically appropriate icon | ✅ Pass |
+| Clean, compiling diff matching project style | ⚠️ Partial (compiles, but deviates from rubric requirement) |
+
+The agent got 5 out of 7 criteria fully right. The critical failure is using a hand-rolled template string instead of the prescribed `getSurveyUrl()` utility — this is an explicit rubric requirement and the agent's own "Design decisions" section shows awareness of the pattern without complying with it.
+
+**Score: 3 / 5**
 

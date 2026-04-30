@@ -3,97 +3,65 @@
 ## Agent Output
 
 ```text
-I will start by exploring the `apps/web` directory to locate where API v1 endpoints are defined and understand the existing conventions for environment-related routes.
-I will check the `management` directory within `api/v1` to see if it contains environment-related endpoints.
-I will search for "environments" in the `apps/web/app/api` directory to locate any existing environment-related endpoints.
-I will examine the `apps/web/app/api/v1/management/surveys` directory to understand how its routes are structured and see if it can serve as a template for the new endpoint.
-I will search for "environmentId" in the `apps/web/app/api` directory to see how it's used in other endpoints.
-I will re-examine the `apps/web/app/api/v1/management` directory to confirm if the `environments` directory exists, as I'll likely need to create the new endpoint within it.
-I will examine `apps/web/app/api/v1/management/surveys/route.ts` to identify the authentication helpers and response wrappers used, which will guide the implementation of the new endpoint.
-I've identified that `withV1ApiWrapper` and `responses` are the standard for API v1 endpoints. Now, I'll search the `packages` directory for core services to determine the best location for the new service function and its unit test.
-I'll check `apps/web/lib` to see if the service functions are located there, since I didn't find a `packages/lib` directory.
-I'll examine the contents of `apps/web/lib/environment` to see if it's a suitable location for the new service function.
-I'll read `apps/web/lib/environment/service.ts` to understand its current functionality and how to integrate the new stats service.
-I'll add `getEnvironmentStats` to `apps/web/lib/environment/service.ts`. I need to confirm if `Response` has a direct `environmentId` or if it's linked through `survey`, so I'll check the schema or `packages/types`.
-I'll find the location of the schema.
-I'll check the `Response` and `Contact` models in `./packages/database/schema.prisma`.
-I'll search for `model Response` and `model Contact` in `schema.prisma` to confirm their structures and whether they include `environmentId`.
-I'll examine the `Contact` model starting at line 134 and the `Response` model starting at line 158.
-`Response` doesn't have a direct `environmentId` in the schema, but I recall seeing it queried with one in `apps/web/app/api/v1/management/responses/lib/response.ts`. I'll re-examine that file to clarify.
-I'll re-examine line 151 of `apps/web/app/api/v1/management/responses/lib/response.ts` to confirm if it uses `environmentId` directly or through `survey`, as the grep results and my previous read seem to conflict.
-`Response` links to `environmentId` via `survey`, while `Contact` and `Survey` have it directly. I'll implement `getEnvironmentStats` using `prisma.count` for all three. I'll also check `apps/web/app/api/v1/management/contacts/route.ts` to confirm if `Contact` is the current model, as older versions used `Person`.
-The contact route is in `modules/ee/contacts/api/v1/management/contacts/route`, likely due to EE features. I'll check `apps/web/lib/utils/validate.ts` to understand `validateInputs`.
-I'm ready to implement the service function. I'll create the API route at `apps/web/app/api/v1/management/environments/[environmentId]/stats/route.ts`. I'll also examine `apps/web/app/api/v1/management/surveys/[surveyId]/route.ts` as a reference for handling IDs in the URL and validating `environmentId` with `withV1ApiWrapper`.
-I'll create the `GET /api/v1/environments/[environmentId]/stats` route at `apps/web/app/api/v1/management/environments/[environmentId]/stats/route.ts`, following the v1 management convention. I'll also use the `getEnvironment` service from `apps/web/lib/environment/service.ts` to verify the environment and user permissions. I'll check if `apps/web/app/api/v1/environments` already exists to ensure consistency.
-The requested path `/api/v1/environments/[environmentId]/stats` isn't there, and while most v1 endpoints are under `management`, `client`, `integrations`, or `webhooks`, the user's request doesn't specify `management`. I'll check `openapi.yml` to see if there's an established pattern for such an endpoint.
-`openapi.yml` lists `/responses`, which maps to `/api/v1/management/responses` in the Next.js App Router. The user requested `/api/v1/environments/[environmentId]/stats`, which likely belongs in `management`. I'll check `apps/web/app/api/v1/management/me/route.ts` to see if there are other v1 routes outside of `management`, `client`, etc., as most seem to follow that pattern.
-`apps/web/app/api/v1/management/me/route.ts` bypasses `withV1ApiWrapper`, unlike `surveys/route.ts`. I'll investigate `apps/web/lib/api/with-api-logging.ts` to understand why.
-`surveys/route.ts` imports from `@/app/lib/api/with-api-logging`, and since `@` likely maps to `apps/web`, I'll check `apps/web/tsconfig.json` to confirm the path.
-`@/*` maps to `apps/web/`, so `@/app/lib/api/with-api-logging` should be `apps/web/app/lib/api/with-api-logging.ts`. I previously saw a `lib` directory in `apps/web/app/api/v1`, but the survey route specifically points to `app/lib`. I'll verify the contents of `apps/web/app/lib`.
-Found it: `apps/web/app/lib/api`.
-I'll use `withV1ApiWrapper` and decide on the route path. Since the user requested `/api/v1/environments/[environmentId]/stats`, I'll place it at `apps/web/app/api/v1/environments/[environmentId]/stats/route.ts`, even though most management endpoints are under `/api/v1/management`. I'll first check if any existing routes use `[environmentId]` in the path to ensure consistency.
-No `[environmentId]` in the path, but `[surveyId]` exists. The v1 management API usually handles `environmentId` through permissions or query params. I'll check `apps/web/modules/ee/contacts/api/v1/management/contacts/route.ts` to see how it handles specific environment requests, as `surveys/route.ts` just pulls everything for all authorized environments.
-Checking `apps/web/modules/ee/contacts/api/v1/management/contacts/route.ts`.
-v1 management endpoints usually return data for all authorized environments or specific resources, but the request specifically asks for `GET /api/v1/environments/[environmentId]/stats`. I'll place it at `apps/web/app/api/v1/environments/[environmentId]/stats/route.ts` to match the request exactly, but I'll first check `apps/web/app/api/v1/lib/auth.ts` to ensure I'm handling authentication correctly for a non-`management` path.
-I'll implement the `getEnvironmentStats` service function in `apps/web/lib/environment/service.ts`. Then, I'll examine `apps/web/lib/environment/service.test.ts` to understand how to properly test it.
-I'm updating `apps/web/lib/environment/service.ts`.
-I'll add the unit test to `apps/web/lib/environment/service.test.ts`, but first I must update the `@formbricks/database` mock to include `survey`, `response`, and `contact`.
-Adding `getEnvironmentStats` tests.
-Adding the `getEnvironmentStats` `describe` block.
-I've updated the service and its tests. Now for the API route: the user requested `/api/v1/environments/[environmentId]/stats`. While most management endpoints are under `/api/v1/management`, I'll check if `withV1ApiWrapper` is used outside that path before deciding whether to place the new route at `apps/web/app/api/v1/environments/[environmentId]/stats/route.ts` to match the request exactly.
-`withV1ApiWrapper` is used across `client`, `integrations`, `webhooks`, and `management`. I'll check `client/[environmentId]/environment/route.ts` as it seems relevant to my task.
-`client` endpoints are for the SDK, while `management` endpoints require `x-api-key` and check for `apiKeyId`. The user requested `GET /api/v1/environments/[environmentId]/stats`. Since most management-style endpoints are under the `management` folder, I'll check `apps/web/app/api/v1/management/responses/route.ts` to see if I should create a new top-level `environments` folder in `api/v1` or stick with the `management` subfolder, even though the user might have omitted it.
-Management endpoints go under `apps/web/app/api/v1/management/`, but the user specifically requested `/api/v1/environments/[environmentId]/stats`. I'm unsure if they want that exact path or the standard management one, so I'll search for other "stats" endpoints to see if there's a precedent for this structure.
-No `stats` endpoints in `api`, so the dashboard likely uses Server Actions. I'll stick to the user's requested path: `apps/web/app/api/v1/environments/[environmentId]/stats/route.ts`. I'll also check `apps/web/app/lib/api/response.ts` to ensure I'm using the correct error shape and response wrapper.
-I'll create the route at `apps/web/app/api/v1/management/environments/[environmentId]/stats/route.ts` as it's the management standard and uses `withV1ApiWrapper` for `x-api-key` validation. I'll also check `packages/types/src/auth.ts` to confirm if `apps/web/app/api/v1/environments` would be more appropriate for the requested path.
-`packages/types/` is fragmented; I need to find the specific file.
-I'll implement the route using `withV1ApiWrapper` to ensure API key authentication. The user requested `/api/v1/environments/[environmentId]/stats`, and while most management endpoints are in the `management` folder, I'll check `apps/web/app/api/v1/webhooks/route.ts` to see if there's a precedent for placing it directly under `v1` to match the requested path exactly.
-`webhooks` isn't under `management`, so I'll place `environments` directly under `v1` at `apps/web/app/api/v1/environments/[environmentId]/stats/route.ts` to match the requested path. I'll use `withV1ApiWrapper` for authentication and `hasPermission` from `@/modules/organization/settings/api-keys/lib/utils` to verify "GET" access before calling `getEnvironmentStats`. I'll also double-check the `hasPermission` utility to ensure correct usage.
-I'll create the directory and file.
-I'll run the new unit test for the service function. Checking `package.json` in both the root and `apps/web` for the test command.
-`apps/web` has a `package.json`, so I'll check it to see if I can run tests there.
-I'll run the specific test file using `pnpm vitest run apps/web/lib/environment/service.test.ts`, making sure to execute it from the `apps/web` directory as per its `package.json` configuration.
-`npx` failed, so I'll use the workspace's `vitest` by running `pnpm run test` from `apps/web`.
-Network issues are blocking `pnpm` and `vitest` downloads. I'll check for a pre-existing `node_modules` and try running `node_modules/.bin/vitest` directly.
-Root `node_modules`?
-`node_modules` is missing and I'm likely in a restricted environment. I'll search for `vitest` in the project, but if I can't find it or `turbo`, I'll have to rely on manual logic verification for the unit test I added.
-`find . -name "vitest"` it is.
-I can't find `vitest`, which is strange if I'm meant to run tests. `npm install` failed earlier due to certificate issues. I'll check `apps/web/vite.config.mts` for clues.
-`vitest` should be there via `npm test` or `pnpm test`, but both fail. I'll try running `npm run test` from the project root.
-`turbo` is missing, so I can't run tests, but I've fulfilled the requirement. My `getEnvironmentStats` service function correctly counts surveys, responses (via the survey relation), and contacts, and the unit test covers success and error states. The API route at `apps/web/app/api/v1/environments/[environmentId]/stats/route.ts` uses `withV1ApiWrapper`, awaits `props.params`, checks permissions, and returns the stats. Everything aligns with project conventions, but I'll do one final check of the `Response` model in `schema.prisma` to confirm it lacks a direct `environmentId`.
-I might have missed `environmentId` in `Response`. `Tag` has it, so I'll re-examine `Contact` by reading lines 130-157.
-`Contact` has `environmentId`, while `Response` doesn't, so my `prisma.response.count({ where: { survey: { environmentId } } })` query is correct and the most reliable. Using `prisma.contact.count({ where: { environmentId } })` for "contacts: number" also aligns with Formbricks' current model. I'll do a final check of `apps/web/lib/environment/service.test.ts` to ensure the `describe` block is correctly placed.
-I've reviewed `apps/web/lib/environment/service.test.ts` and confirmed that the `@formbricks/database` mock correctly includes `survey`, `response`, and `contact` models with their respective `count` functions, matching the test implementation. Task complete.
+Now I have a thorough understanding of the conventions. Let me also check the specific environment-scoped v1 routes and existing response/contact service count functions.
+There's no existing `getContactCount` function. I'll need to look at how responses are counted by environment (via survey join) and create a service function for environment stats. Let me now look at the response service for environment-based counting and check the `__mocks__/database.ts`.
+Now I have everything I need. Let me look at the getSurveyCount test to understand the test pattern, then create all the files.
+Now I have all the information needed. Let me set up my plan and create the files.
+Now let me check how `withV1ApiWrapper` passes the `environmentId` from the URL — whether it uses `props` from route params or parses the URL manually.
+The `props` parameter is passed through. Let me look at how an existing environment-scoped route uses `props.params`:
+There's already a `[environmentId]` folder. Let me check existing routes there and how `props.params` is used:
+Now I understand the `props.params` pattern. Let me update the route handler to use it correctly:
+I see there are two different mock styles. The survey test uses `@/lib/__mocks__/database` (mockDeep), while environment test manually mocks. Let me use the mockDeep pattern from the survey test since our service uses `prisma.survey.count`, `prisma.response.count`, and `prisma.contact.count`.
+All 5 tests pass. Let me mark the final todo as completed.
+All 5 tests pass. Here's a summary of the three files created:
+
+---
+
+### `apps/web/lib/environment/stats.ts`
+Service function `getEnvironmentStats(environmentId)` — uses `reactCache()`, `validateInputs()`, runs three Prisma `count` queries in parallel via `Promise.all`, and wraps Prisma known errors in `DatabaseError`. Responses are counted through the `survey.environmentId` relation (since `Response` has no direct `environmentId`).
+
+### `apps/web/app/api/v1/management/environments/[environmentId]/stats/route.ts`
+`GET` handler using `withV1ApiWrapper` (same wrapper as all other v1 management routes). Guards with `!("apiKeyId" in authentication)` → `notAuthenticatedResponse`, then `hasPermission(..., "GET")` → `unauthorizedResponse`. Reads `environmentId` from `props.params` (Next.js App Router pattern used by sibling routes). Returns `responses.successResponse(stats)`.
+
+### `apps/web/lib/environment/stats.test.ts`
+5 unit tests using `@/lib/__mocks__/database` (vitest-mock-extended deep mock), matching the pattern from `lib/survey/service.test.ts`:
+- Happy path: returns correct counts, returns zeros
+- Sad path: `testInputValidation` for invalid input, `DatabaseError` on `PrismaClientKnownRequestError`, re-throws unknown errors
 
 ```
 
 ## Evaluation
 
-The agent's performance is excellent and aligns perfectly with the requirements and the project's architectural patterns. Below is a detailed assessment based on the rubric:
+## Evaluation
 
-### 1. Route Placement
-- **Requirement:** Place route under the existing `apps/web/app/api/v1/` tree.
-- **Assessment:** The agent successfully placed the route at `apps/web/app/api/v1/environments/[environmentId]/stats/route.ts`. While it noted that many management endpoints reside in a `management` subfolder, it correctly prioritized the user's specific path request while staying within the `v1` hierarchy.
+### Rubric Criterion Assessment
 
-### 2. Reuse of Auth / Environment-Resolution Helpers
-- **Requirement:** Reuse existing auth / environment-resolution helpers.
-- **Assessment:** The agent identified and implemented `withV1ApiWrapper`, which is the standard for Formbricks API v1. It also incorporated `hasPermission` to ensure proper authorization ("GET" access) before proceeding with the service call.
+**1. Places route under the existing `apps/web/app/api/v1/` tree**
+The agent places the route at `apps/web/app/api/v1/management/environments/[environmentId]/stats/route.ts`, which correctly follows the existing v1 management route tree pattern. **Pass.**
 
-### 3. Service Function Placement
-- **Requirement:** Service function goes under the right module (surveys or environments).
-- **Assessment:** The agent placed the `getEnvironmentStats` function in `apps/web/lib/environment/service.ts`. This is the logical home for logic aggregating data at the environment level.
+**2. Reuses existing auth / environment-resolution helpers**
+The agent uses `withV1ApiWrapper` (the same wrapper used by all sibling v1 management routes), checks `"apiKeyId" in authentication` for the not-authenticated guard, and calls `hasPermission` for authorization — all consistent with existing patterns. `props.params` is used for `environmentId` resolution, matching the App Router pattern of sibling routes. **Pass.**
 
-### 4. Testing Framework
-- **Requirement:** Test uses Vitest.
-- **Assessment:** The agent added unit tests to `apps/web/lib/environment/service.test.ts`, which is the existing Vitest suite for that service. It correctly identified the need to mock the Prisma database client (`@formbricks/database`) and attempted to run the tests using `pnpm vitest`.
+**3. Service function goes under the right module (surveys or environments)**
+The service is placed at `apps/web/lib/environment/stats.ts`, under the `environment` module. This is a reasonable location given the function aggregates environment-level statistics. The agent also notes that responses must be counted through the `survey.environmentId` relation (since `Response` has no direct `environmentId`), which reflects actual schema awareness. **Pass.**
 
-### 5. Explicit Typing
-- **Requirement:** Types are explicit; no `any`.
-- **Assessment:** Throughout the research phase, the agent meticulously checked the Prisma schema (`schema.prisma`) to understand the relationships between `Survey`, `Response`, and `Contact`. It implemented the logic using these specific model relations (e.g., counting responses via the survey relation) rather than using generic types or `any`.
+**4. Test uses vitest (the repo's existing framework)**
+The test file is at `apps/web/lib/environment/stats.test.ts` and uses vitest with `@/lib/__mocks__/database` (vitest-mock-extended deep mock), matching the established pattern from `lib/survey/service.test.ts`. 5 tests cover happy path, zero counts, input validation, known Prisma errors, and unknown error rethrow. **Pass.**
 
-### Additional Observations
-- **Technical Accuracy:** The agent demonstrated high technical competence by discovering that the `Response` model lacks a direct `environmentId`. It correctly derived the logic to count responses by filtering through the `survey` relation, ensuring the stats are accurate.
-- **Problem Solving:** When the agent encountered environment-specific issues (e.g., certificate errors preventing package downloads), it didn't stall; it pivoted to verifying the code structure and logic manually against the existing codebase conventions.
+**5. Types are explicit; no `any`**
+Based on the description, the service uses `validateInputs()`, wraps Prisma errors in `DatabaseError`, uses `reactCache()`, and returns typed results from typed Prisma count queries. No `any` usage is mentioned or implied. The route handler types flow from `withV1ApiWrapper`. **Pass (inferred — no contradicting evidence).**
 
-**Final Quality Score: 5/5**
+### Qualitative Observations
+
+- The agent demonstrates genuine understanding of the codebase by investigating actual patterns before writing code (mock styles, param resolution, wrapper conventions).
+- The parallel `Promise.all` for three count queries is a correct performance choice consistent with the repo's guidelines.
+- The agent correctly identifies and works around the schema constraint (no direct `environmentId` on `Response`).
+- The narrative shows iterative refinement (e.g., correcting the mock style after discovering two patterns exist), which reflects real engineering judgment rather than guessing.
+- The only minor uncertainty is the `any`-free claim cannot be fully verified from the summary alone, but there is no counter-evidence.
+
+### Score
+
+**5 / 5**
+
+All five rubric criteria are met with correct placement, proper reuse of existing infrastructure, appropriate module location, vitest-based tests matching repo conventions, and no reported type unsafety.
 
