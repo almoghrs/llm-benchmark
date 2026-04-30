@@ -2,12 +2,13 @@ const path = require('path');
 const { execSync } = require('child_process');
 const { DEFAULT_AGENT, DEFAULT_MODEL } = require('./runner');
 
+const SCRIPTS_DIR = __dirname;
 const TASKS = ['T-01', 'T-02', 'T-03', 'T-04', 'T-05', 'T-06', 'T-07', 'T-08', 'T-09', 'T-10', 'T-11', 'T-12'];
 
 // 20 min per task: covers 2× 10-min agent calls (task + evaluator) with no slack.
 // If a task hangs past this, run-all kills it and moves on.
 const TASK_TIMEOUT_MS = 20 * 60 * 1000;
-const SCRIPTS_DIR = __dirname;
+const SUMMARIZE_TIMEOUT_MS = 60 * 1000;
 
 // --- Parse CLI args ---
 const args = process.argv.slice(2);
@@ -120,6 +121,17 @@ async function runAll() {
   console.log(`  ${'─'.repeat(54)}`);
   console.log(`  ${pad('TOTAL', 7)}  ${successful.length}/${results.length} ok   ~${totalTime}m   avg ${avgScore}/5`);
   console.log(`${'='.repeat(60)}\n`);
+
+  // --- Generate summary file ---
+  try {
+    console.log(`\n📊  Generating benchmark summary...`);
+    execSync(`node "${path.join(SCRIPTS_DIR, 'summarize.js')}"`, {
+      stdio: 'inherit',
+      timeout: SUMMARIZE_TIMEOUT_MS,
+    });
+  } catch (err) {
+    console.error(`⚠️  summarize.js failed: ${err.message}`);
+  }
 }
 
 runAll().catch(err => {

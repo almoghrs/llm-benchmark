@@ -59,8 +59,23 @@ before invoking the agent.
 
 After each task the runner invokes the same agent a second time as an expert evaluator,
 comparing the agent's output against the `## Expected` rubric in `tasks/<TASK_ID>/task.md`.
-The result (agent output + evaluation text + score) is saved to `tasks/<TASK_ID>/assessment.md`.
+The result (agent output + evaluation text + score) is saved to `tasks/<TASK_ID>/assessment.md`,
+with a metadata header containing the timestamp, agent, model, score, and duration.
+
+A copy is also archived to `tasks/<TASK_ID>/history/<timestamp>.md` after every run, so previous
+results are never overwritten.
 
 **Important:** Benchmark rubrics often require seeing evidence of your work. Always include the
 search commands you used and a representative sample of their raw output in your final response.
 Do not just provide a summary.
+
+## Summarizing Results
+
+To generate a markdown summary of all current (latest) assessments:
+
+```bash
+node scripts/summarize.js
+```
+
+This reads every `tasks/T-*/assessment.md`, extracts the run metadata, and writes a summary table
+to `tasks/results/<timestamp>.md`. `run-all.js` calls this automatically after completing all tasks.

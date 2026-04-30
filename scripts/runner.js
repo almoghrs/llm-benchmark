@@ -114,7 +114,16 @@ function extractScore(text) {
   return null;
 }
 
+/**
+ * Returns a filesystem-safe UTC timestamp string, e.g. "2026-04-30T01-23-45Z"
+ */
+function makeTimestamp() {
+  return new Date().toISOString().replace(/:/g, '-').replace(/\.\d{3}Z$/, 'Z');
+}
+
 async function runTask(taskId, agent, model, isVerbose, isJson) {
+  const timestamp = makeTimestamp();
+
   let prompt, expected;
   try {
     ({ prompt, expected } = extractPromptAndExpected(taskId));
@@ -162,8 +171,15 @@ Please provide a detailed assessment of whether the agent output meets the expec
 
   const score = extractScore(assessmentText);
 
-  const assessmentMdPath = path.join(TASKS_DIR, taskId, 'assessment.md');
-  fs.writeFileSync(assessmentMdPath, `# Assessment for ${taskId}
+  const assessmentContent = `# Assessment for ${taskId}
+
+<!-- run-meta: timestamp=${timestamp} agent=${agent} model=${model} score=${score !== null ? score : 'n/a'} timeMin=${timeMin} -->
+
+**Run:** ${timestamp}  
+**Agent:** ${agent}  
+**Model:** ${model}  
+**Score:** ${score !== null ? `${score}/5` : 'n/a'}  
+**Duration:** ~${timeMin}m  
 
 ## Agent Output
 
@@ -174,12 +190,23 @@ ${agentOutput}
 ## Evaluation
 
 ${assessmentText}
-`, 'utf-8');
+`;
 
+  // Write latest assessment
+  const assessmentMdPath = path.join(TASKS_DIR, taskId, 'assessment.md');
+  fs.writeFileSync(assessmentMdPath, assessmentContent, 'utf-8');
   console.log(`\n✅  Saved assessment to ${assessmentMdPath}`);
+
+  // Archive to tasks/<TASK_ID>/history/<timestamp>.md
+  const historyDir = path.join(TASKS_DIR, taskId, 'history');
+  fs.mkdirSync(historyDir, { recursive: true });
+  const archivePath = path.join(historyDir, `${timestamp}.md`);
+  fs.copyFileSync(assessmentMdPath, archivePath);
+  console.log(`📦  Archived to ${archivePath}`);
+
   if (score !== null) console.log(`   Score: ${score}/5`);
 
-  return { taskId, status: 'success', score, timeMin };
+  return { taskId, status: 'success', score, timeMin, timestamp };
 }
 
 // --- CLI (only when executed directly) ---
