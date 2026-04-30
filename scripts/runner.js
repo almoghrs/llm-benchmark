@@ -8,17 +8,20 @@ const FORMBRICKS_DIR = path.join(__dirname, '../formbricks');
 const DEFAULT_AGENT = 'opencode';
 const DEFAULT_MODEL = 'github-copilot/claude-sonnet-4.6';
 
+const AGENT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes per agent call
+const GIT_TIMEOUT_MS   =      30 * 1000; // 30 seconds for git/setup ops
+
 function resetRepo() {
   console.log(`\n🔄 Resetting ${FORMBRICKS_DIR} to a clean state...`);
-  execSync('git restore .', { cwd: FORMBRICKS_DIR, stdio: 'inherit' });
-  execSync('git clean -fd', { cwd: FORMBRICKS_DIR, stdio: 'inherit' });
+  execSync('git restore .', { cwd: FORMBRICKS_DIR, stdio: 'inherit', timeout: GIT_TIMEOUT_MS });
+  execSync('git clean -fd', { cwd: FORMBRICKS_DIR, stdio: 'inherit', timeout: GIT_TIMEOUT_MS });
 }
 
 function runSetup(taskId) {
   const setupPath = path.join(TASKS_DIR, taskId, 'setup.sh');
   if (fs.existsSync(setupPath)) {
     console.log(`\n⚙️  Running pre-setup for ${taskId}...`);
-    execSync(`bash "${setupPath}"`, { cwd: FORMBRICKS_DIR, stdio: 'inherit' });
+    execSync(`bash "${setupPath}"`, { cwd: FORMBRICKS_DIR, stdio: 'inherit', timeout: GIT_TIMEOUT_MS });
   }
 }
 
@@ -80,8 +83,6 @@ function extractTextFromJsonStream(raw) {
   }
   return text || raw; // fall back to raw if nothing parsed
 }
-
-const AGENT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes per agent call
 
 function execAgent(cmd, promptValue, parseJson) {
   let output = '';

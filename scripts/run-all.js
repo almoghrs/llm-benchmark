@@ -3,6 +3,10 @@ const { execSync } = require('child_process');
 const { DEFAULT_AGENT, DEFAULT_MODEL } = require('./runner');
 
 const TASKS = ['T-01', 'T-02', 'T-03', 'T-04', 'T-05', 'T-06', 'T-07', 'T-08', 'T-09', 'T-10', 'T-11', 'T-12'];
+
+// 20 min per task: covers 2× 10-min agent calls (task + evaluator) with no slack.
+// If a task hangs past this, run-all kills it and moves on.
+const TASK_TIMEOUT_MS = 20 * 60 * 1000;
 const SCRIPTS_DIR = __dirname;
 
 // --- Parse CLI args ---
@@ -55,8 +59,11 @@ async function runAll() {
     const cmd = `node "${path.join(SCRIPTS_DIR, 'runner.js')}" ${taskId} ${extraFlags}`;
 
     try {
-      execSync(cmd, { stdio: 'inherit' });
+      execSync(cmd, { stdio: 'inherit', timeout: TASK_TIMEOUT_MS });
     } catch (err) {
+      if (err.signal === 'SIGTERM' || err.code === 'ETIMEDOUT') {
+        console.error(`\n⏰  ${taskId} timed out after ${TASK_TIMEOUT_MS / 60000} minutes — skipping.`);
+      }
       exitCode = err.status || 1;
     }
 
