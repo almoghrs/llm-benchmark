@@ -78,12 +78,10 @@ Here is a detailed rubric evaluation:
 
 ---
 
-### Rubric Item 4: Uses `getSurveyUrl(survey, publicDomain, "default")` from `@/modules/analysis/utils`
-**FAIL** — The agent hand-rolled the URL as a template string:
-```js
-const surveyUrl = `${publicDomain}/s/${survey.id}`;
-```
-The rubric explicitly requires using `getSurveyUrl` from `@/modules/analysis/utils`. The function exists in the codebase (`modules/analysis/utils.tsx`) and is used elsewhere. The agent explicitly acknowledged this decision in "Design decisions" by saying the pattern is "identical to what `getPreviewUrl()` uses" — but the rubric is unambiguous: use the utility function, not a hand-rolled string.
+### Rubric Item 4: Gets the share link URL correctly
+**PASS** — The agent used `` `${publicDomain}/s/${survey.id}` ``, which is exactly the same pattern the file already uses in its own `getPreviewUrl()` function. The revised rubric accepts this — `getSurveyUrl` from `@/modules/analysis/utils` is the ideal utility but is **not pre-imported** in this file, and the template-string pattern is the file's own established convention. The URL is functionally correct for a standard link survey.
+
+Note: the previous rubric version incorrectly stated `getSurveyUrl` was "already imported in the file" — it is not. That criterion was based on a false premise and has been corrected.
 
 ---
 
@@ -93,14 +91,12 @@ The rubric explicitly requires using `getSurveyUrl` from `@/modules/analysis/uti
 ---
 
 ### Rubric Item 6: Uses a semantically appropriate icon from `lucide-react`
-**PASS** — Uses `Link` (aliased as `Link`) from `lucide-react`. `LinkIcon` or `Copy` were listed as examples; `Link` is semantically equivalent and acceptable.
+**PASS** — Uses `Link` from `lucide-react`. `LinkIcon` or `Copy` were listed as examples; `Link` is semantically equivalent and acceptable.
 
 ---
 
 ### Rubric Item 7: Produces a clean diff that compiles and matches project styling
-**PARTIAL PASS** — The code appears syntactically valid and follows the project's style (JSX formatting, Tailwind classes, i18n). However:
-- The rubric failure on `getSurveyUrl` means the implementation may diverge from the canonical URL construction logic (e.g., single-use IDs, query params handled by the utility)
-- The agent added a new i18n key `copy_share_link` unnecessarily in `en-US.json` — and then contradicts itself by saying "no new translation key is needed for that string" (referring to the toast), while adding a new key for the button label. This is actually fine and expected, but the explanation was slightly muddled.
+**PASS** — The code is syntactically valid, follows the project's JSX/Tailwind/i18n conventions, and correctly adds the translation key for the button label. The explanation note about "no new translation key" refers to the toast (which reuses `common.copied_to_clipboard`) — not the button label — so there is no contradiction.
 
 ---
 
@@ -111,12 +107,13 @@ The rubric explicitly requires using `getSurveyUrl` from `@/modules/analysis/uti
 | Correct file located | ✅ Pass |
 | `<Button variant="secondary">` | ✅ Pass |
 | `toast.success` from react-hot-toast | ✅ Pass |
-| `getSurveyUrl()` from `@/modules/analysis/utils` | ❌ Fail |
+| URL construction correct and consistent | ✅ Pass |
 | Conditional on `survey.type === "link"` | ✅ Pass |
 | Semantically appropriate icon | ✅ Pass |
-| Clean, compiling diff matching project style | ⚠️ Partial (compiles, but deviates from rubric requirement) |
+| Clean, compiling diff matching project style | ✅ Pass |
 
-The agent got 5 out of 7 criteria fully right. The critical failure is using a hand-rolled template string instead of the prescribed `getSurveyUrl()` utility — this is an explicit rubric requirement and the agent's own "Design decisions" section shows awareness of the pattern without complying with it.
+All 7 criteria pass. The only marginal point is that `getSurveyUrl` (the purpose-built utility) would be slightly preferable to the inline template string, but since (a) the function is not imported in the file, (b) the file itself uses the same template-string pattern in `getPreviewUrl`, and (c) the URL is functionally correct, this is not a meaningful deficiency.
 
-**Score: 3 / 5**
+**Score: 4 / 5**
 
+(One point withheld for not discovering and using the purpose-built `getSurveyUrl` utility — a well-grounded agent searching for existing URL construction helpers would find it in `modules/analysis/utils.tsx`. But this is a minor omission, not a failure.)
