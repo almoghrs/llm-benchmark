@@ -8,7 +8,7 @@ const TASKS = ['T-01', 'T-02', 'T-03', 'T-04', 'T-05', 'T-06', 'T-07', 'T-08', '
 // 20 min per task: covers 2× 10-min agent calls (task + evaluator) with no slack.
 // If a task hangs past this, run-all kills it and moves on.
 const TASK_TIMEOUT_MS = 20 * 60 * 1000;
-const SUMMARIZE_TIMEOUT_MS = 5 * 60 * 1000;
+const SUMMARIZE_TIMEOUT_MS = 60 * 1000;
 
 // --- Parse CLI args ---
 const args = process.argv.slice(2);
@@ -70,17 +70,19 @@ async function runAll() {
 
     const taskTimeMin = Math.round((Date.now() - taskStartTime) / 60000);
 
-    // Read score from run-meta in the assessment file (authoritative)
+    // Try to read score from the assessment file written by runner.js
     let score = null;
     try {
       const assessPath = path.join(__dirname, '../tasks', taskId, 'assessment.md');
       const fs = require('fs');
       if (fs.existsSync(assessPath)) {
         const content = fs.readFileSync(assessPath, 'utf-8');
-        const metaMatch = content.match(/<!--\s*run-meta:(.*?)-->/);
-        if (metaMatch) {
-          const m = metaMatch[1].match(/score=([^\s]+)/);
-          if (m && m[1] !== 'n/a') score = parseFloat(m[1]);
+        // Extract score using same patterns as runner.js
+        const m1 = content.match(/\b([0-5])(?:\.\d+)?\s*(?:\/\s*5|out\s+of\s+5)/i);
+        if (m1) score = parseFloat(m1[1]);
+        else {
+          const m2 = content.match(/(?:score|quality)[^\d]*([0-5])(?:\.\d+)?/i);
+          if (m2) score = parseFloat(m2[1]);
         }
       }
     } catch (_) {}
@@ -123,7 +125,7 @@ async function runAll() {
   // --- Generate summary file ---
   try {
     console.log(`\n📊  Generating benchmark summary...`);
-    execSync(`node "${path.join(SCRIPTS_DIR, 'summarize.js')}" --agent ${agent} --model ${model}`, {
+    execSync(`node "${path.join(SCRIPTS_DIR, 'summarize.js')}"`, {
       stdio: 'inherit',
       timeout: SUMMARIZE_TIMEOUT_MS,
     });

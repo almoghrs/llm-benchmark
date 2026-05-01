@@ -105,16 +105,13 @@ function execAgent(cmd, promptValue, parseJson) {
 }
 
 function extractScore(text) {
-   // Preferred: look for the structured "SCORE: X" line we asked the evaluator to produce
-   const scoreLine = text.match(/^SCORE:\s*([0-5])(?:\.\d+)?\s*$/m);
-   if (scoreLine) return parseFloat(scoreLine[1]);
-   // Fallback: last "X/5" or "X out of 5" in the text (final verdict, not per-criterion)
-   const allM1 = [...text.matchAll(/\b([0-5])(?:\.\d+)?\s*(?:\/\s*5|out\s+of\s+5)/gi)];
-   if (allM1.length) return parseFloat(allM1[allM1.length - 1][1]);
-   // Fallback: last "Score: X" or "quality score … X"
-   const allM2 = [...text.matchAll(/(?:score|quality)[^\d]*([0-5])(?:\.\d+)?/gi)];
-   if (allM2.length) return parseFloat(allM2[allM2.length - 1][1]);
-   return null;
+  // "3/5", "3 / 5", "3 out of 5"
+  const m1 = text.match(/\b([0-5])(?:\.\d+)?\s*(?:\/\s*5|out\s+of\s+5)/i);
+  if (m1) return parseFloat(m1[1]);
+  // "Score: 3", "quality score of 3"
+  const m2 = text.match(/(?:score|quality)[^\d]*([0-5])(?:\.\d+)?/i);
+  if (m2) return parseFloat(m2[1]);
+  return null;
 }
 
 /**
@@ -165,11 +162,7 @@ ${expected}
 Agent Output:
 ${agentOutput}
 
-Please provide a detailed assessment of whether the agent output meets the expected rubric, and assign a final quality score (0-5).
-
-IMPORTANT: You MUST end your response with EXACTLY this line (and nothing after it):
-SCORE: <number>
-where <number> is an integer from 0 to 5. For example: SCORE: 3`;
+Please provide a detailed assessment of whether the agent output meets the expected rubric, and assign a final quality score (0-5).`;
 
   // Assessment always uses default (non-verbose, non-json) flags for cleanliness
   const { cmd: assessCmd, parseJson: assessParseJson } = buildAgentCmd(agent, model, false, false);
@@ -180,6 +173,14 @@ where <number> is an integer from 0 to 5. For example: SCORE: 3`;
 
   const assessmentContent = `# Assessment for ${taskId}
 
+<!-- run-meta: timestamp=${timestamp} agent=${agent} model=${model} score=${score !== null ? score : 'n/a'} timeMin=${timeMin} -->
+
+**Run:** ${timestamp}  
+**Agent:** ${agent}  
+**Model:** ${model}  
+**Score:** ${score !== null ? `${score}/5` : 'n/a'}  
+**Duration:** ~${timeMin}m  
+
 ## Agent Output
 
 \`\`\`text
@@ -189,16 +190,6 @@ ${agentOutput}
 ## Evaluation
 
 ${assessmentText}
-
----
-
-<!-- run-meta: timestamp=${timestamp} agent=${agent} model=${model} score=${score !== null ? score : 'n/a'} timeMin=${timeMin} -->
-
-**Run:** ${timestamp}  
-**Agent:** ${agent}  
-**Model:** ${model}  
-**Score:** ${score !== null ? `${score}/5` : 'n/a'}  
-**Duration:** ~${timeMin}m  
 `;
 
   // Write latest assessment
